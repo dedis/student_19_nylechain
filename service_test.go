@@ -33,14 +33,17 @@ func TestService_SimpleBLSCoSi(t *testing.T) {
 		aggPublic = aggPublic.Add(aggPublic, r.Public)
 	}
 	defer local.CloseAll()
-
-	log.LLvl2("sa")
-	services := local.GetServices(hosts, serviceID)
+	services := local.GetServices(hosts, SimpleBLSCoSiID)
 
 	for _, s := range services {
 		log.Lvl2("Sending request to", s)
-		signature, err := s.(*Service).SimpleBLSCoSi(roster, msg)
-		require.NoError(t, bls.Verify(testSuite, aggPublic, msg, signature))
+		resp, err := s.(*Service).SimpleBLSCoSi(
+			&CoSi{
+				Roster:  roster,
+				Message: msg,
+			},
+		)
+		require.NoError(t, bls.Verify(testSuite, aggPublic, msg, resp.Signature))
 		require.Nil(t, err)
 	}
 }
