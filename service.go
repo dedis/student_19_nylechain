@@ -15,17 +15,14 @@ import (
 	"go.dedis.ch/onet/v3/network"
 )
 
-// Used for tests
-var serviceID onet.ServiceID
+// SimpleBLSCoSiID is used for tests
+var SimpleBLSCoSiID onet.ServiceID
 
 const protoName = "simpleBLSCoSi"
 
 func init() {
-	if _, err := onet.GlobalProtocolRegister(protoName, simpleblscosi.NewDefaultProtocol); err != nil {
-		log.ErrFatal(err)
-	}
 	var err error
-	serviceID, err = onet.RegisterNewService("SimpleBLSCoSi", newService)
+	SimpleBLSCoSiID, err = onet.RegisterNewService("SimpleBLSCoSi", newService)
 	log.ErrFatal(err)
 	network.RegisterMessage(&storage{})
 }
@@ -50,8 +47,9 @@ type storage struct {
 }
 
 // SimpleBLSCoSi starts a simpleblscosi-protocol and returns the final signature.
-func (s *Service) SimpleBLSCoSi(roster *onet.Roster, msg []byte) ([]byte, error) {
-	tree := roster.GenerateNaryTreeWithRoot(2, s.ServerIdentity())
+// The client chooses the message to be signed.
+func (s *Service) SimpleBLSCoSi(cosi *CoSi) (*CoSiReply, error) {
+	tree := cosi.Roster.GenerateNaryTreeWithRoot(2, s.ServerIdentity())
 	if tree == nil {
 		return nil, errors.New("couldn't create tree")
 	}
@@ -59,11 +57,11 @@ func (s *Service) SimpleBLSCoSi(roster *onet.Roster, msg []byte) ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
-	var root *simpleblscosi.SimpleBLSCoSi
-	root = pi.(*simpleblscosi.SimpleBLSCoSi)
-	root.Message = msg
-	root.Start()
-	signature := <-root.FinalSignature
+	pi.(*simpleblscosi.SimpleBLSCoSi).Message = cosi.Message
+	pi.Start()
+	signature := &CoSiReply{
+		Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
+	}
 	return signature, nil
 }
 
@@ -103,8 +101,9 @@ func newService(c *onet.Context) (onet.Service, error) {
 	s := &Service{
 		ServiceProcessor: onet.NewServiceProcessor(c),
 	}
-	if err := s.RegisterHandlers(s.SimpleBLSCoSi); err != nil {
-		return nil, errors.New("Couldn't register messages")
+	if err := s.RegisterHandler(s.SimpleBLSCoSi); err != nil {
+		log.LLvl2(err)
+		return nil, errors.New("Couldn't register message")
 	}
 	if err := s.tryLoad(); err != nil {
 		log.Error(err)
