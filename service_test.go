@@ -8,12 +8,10 @@ import (
 	"go.dedis.ch/kyber/v3/pairing"
 
 	"github.com/stretchr/testify/require"
-	"go.dedis.ch/kyber/v3/suites"
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/log"
 )
 
-var tSuite = suites.MustFind("Ed25519")
 var testSuite = pairing.NewSuiteBn256()
 
 func TestMain(m *testing.M) {
@@ -21,14 +19,13 @@ func TestMain(m *testing.M) {
 }
 
 func TestService_SimpleBLSCoSi(t *testing.T) {
-	local := onet.NewTCPTest(tSuite)
+	local := onet.NewTCPTest(testSuite)
 	msg := []byte("message test")
 	aggPublic := testSuite.Point().Null()
 	// generate 5 hosts, they don't connect, they process messages, and they
 	// don't register the tree or entitylist
 	hosts, roster, _ := local.GenTree(5, true)
 
-	log.LLvl2("hon")
 	for _, r := range roster.List {
 		aggPublic = aggPublic.Add(aggPublic, r.Public)
 	}

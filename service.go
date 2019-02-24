@@ -22,6 +22,9 @@ const protoName = "simpleBLSCoSi"
 
 func init() {
 	var err error
+	if _, err := onet.GlobalProtocolRegister(protoName, simpleblscosi.NewDefaultProtocol); err != nil {
+		log.ErrFatal(err)
+	}
 	SimpleBLSCoSiID, err = onet.RegisterNewService("SimpleBLSCoSi", newService)
 	log.ErrFatal(err)
 	network.RegisterMessage(&storage{})

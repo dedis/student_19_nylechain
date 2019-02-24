@@ -25,7 +25,7 @@ type SimpleBLSCoSi struct {
 	// FinalSignature is the channel that the root should listen on to get the final signature
 	FinalSignature chan []byte
 }
-
+// VerificationFn is a verification functions
 type VerificationFn func(msg []byte) error
 
 // NewDefaultProtocol is the default protocol function used for registration
