@@ -8,6 +8,9 @@ runs on the node.
 import (
 	"errors"
 	"sync"
+	"time"
+
+	"go.dedis.ch/cothority/v3/messaging"
 
 	"github.com/dedis/student_19_nylechain/simpleblscosi"
 	"go.dedis.ch/onet/v3"
@@ -35,6 +38,8 @@ type Service struct {
 	// We need to embed the ServiceProcessor, so that incoming messages
 	// are correctly handled.
 	*onet.ServiceProcessor
+
+	propagateF messaging.PropagationFunc
 
 	storage *storage
 }
@@ -65,7 +70,26 @@ func (s *Service) SimpleBLSCoSi(cosi *CoSi) (*CoSiReply, error) {
 	signature := &CoSiReply{
 		Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
 	}
+	s.startPropagation(s.propagateF, cosi.Roster, signature)
 	return signature, nil
+}
+func (s *Service) propagateHandler(msg network.Message) error {
+	s.storage.Signature <- msg.([]byte)
+	return nil
+}
+
+func (s *Service) startPropagation(propagate messaging.PropagationFunc, ro *onet.Roster, msg network.Message) error {
+
+	replies, err := propagate(ro, msg, 10*time.Second)
+	if err != nil {
+		return err
+	}
+
+	if replies != len(ro.List) {
+		log.Lvl1(s.ServerIdentity(), "Only got", replies, "out of", len(ro.List))
+	}
+
+	return nil
 }
 
 // saves all data.
@@ -110,6 +134,12 @@ func newService(c *onet.Context) (onet.Service, error) {
 	}
 	if err := s.tryLoad(); err != nil {
 		log.Error(err)
+		return nil, err
+	}
+
+	var err error
+	s.propagateF, err = messaging.NewPropagationFunc(c, "Propagate", s.propagateHandler, -1)
+	if err != nil {
 		return nil, err
 	}
 	return s, nil

@@ -16,15 +16,16 @@ type SimpleBLSCoSi struct {
 	// the verification to run during upon receiving the prepare message
 	vf VerificationFn
 
-	prepare chan prepareChan
+	prepare      chan prepareChan
 	prepareReply chan prepareReplyChan
-	commit chan commitChan
-	commitReply chan commitReplyChan
-	done chan bool
+	commit       chan commitChan
+	commitReply  chan commitReplyChan
+	done         chan bool
 
 	// FinalSignature is the channel that the root should listen on to get the final signature
 	FinalSignature chan []byte
 }
+
 // VerificationFn is a verification functions
 type VerificationFn func(msg []byte) error
 
@@ -39,8 +40,8 @@ func NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error)
 func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, suite *pairing.SuiteBn256) (onet.ProtocolInstance, error) {
 	c := &SimpleBLSCoSi{
 		TreeNodeInstance: node,
-		suite: suite,
-		vf: vf,
+		suite:            suite,
+		vf:               vf,
 		done:             make(chan bool),
 		FinalSignature:   make(chan []byte, 1),
 	}
@@ -63,7 +64,7 @@ func (c *SimpleBLSCoSi) Dispatch() error {
 	}
 	if !c.IsLeaf() {
 		var buf []*SimplePrepareReply
-		for i := 0;  i < nbrChild; i++ {
+		for i := 0; i < nbrChild; i++ {
 			reply := <-c.prepareReply
 			log.Lvlf3("%s collecting prepare replies %d/%d", c.ServerIdentity(), i, nbrChild)
 			buf = append(buf, &reply.SimplePrepareReply)
