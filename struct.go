@@ -26,7 +26,8 @@ type CoSi struct {
 	Message []byte
 }
 
-// CoSiReply returns the signature
+// CoSiReply returns the signature and the original message
 type CoSiReply struct {
 	Signature []byte
+	Message []byte
 }

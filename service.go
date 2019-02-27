@@ -6,8 +6,9 @@ runs on the node.
 */
 
 import (
+	"crypto/sha1"
 	"errors"
-	"sync"
+	"hash"
 	"time"
 
 	"go.dedis.ch/cothority/v3/messaging"
@@ -30,7 +31,6 @@ func init() {
 	}
 	SimpleBLSCoSiID, err = onet.RegisterNewService("SimpleBLSCoSi", newService)
 	log.ErrFatal(err)
-	network.RegisterMessage(&storage{})
 }
 
 // Service structure
@@ -39,19 +39,9 @@ type Service struct {
 	// are correctly handled.
 	*onet.ServiceProcessor
 
+	hash1 hash.Hash
+
 	propagateF messaging.PropagationFunc
-
-	storage *storage
-}
-
-// storageID reflects the data we're storing - we could store more
-// than one structure.
-var storageID = []byte("main")
-
-// storage is used to save our data.
-type storage struct {
-	Signature chan []byte
-	sync.Mutex
 }
 
 // SimpleBLSCoSi starts a simpleblscosi-protocol and returns the final signature.
@@ -67,15 +57,21 @@ func (s *Service) SimpleBLSCoSi(cosi *CoSi) (*CoSiReply, error) {
 	}
 	pi.(*simpleblscosi.SimpleBLSCoSi).Message = cosi.Message
 	pi.Start()
-	signature := &CoSiReply{
+	reply := &CoSiReply{
 		Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
+		Message:   cosi.Message,
 	}
-	s.startPropagation(s.propagateF, cosi.Roster, signature)
-	return signature, nil
+	s.startPropagation(s.propagateF, cosi.Roster, reply)
+	return reply, nil
 }
-func (s *Service) propagateHandler(msg network.Message) error {
-	s.storage.Signature <- msg.([]byte)
-	return nil
+
+// propagateHandler receives a *CoSiReply containing both the initial message and the signature.
+// It saves that CoSiReply in the service's bucket, keyed to a hash of the message.
+func (s *Service) propagateHandler(msg network.Message) {
+	message := msg.(*CoSiReply).Message
+	s.hash1.Write(message)
+	s.Save(s.hash1.Sum(nil), msg)
+	return
 }
 
 func (s *Service) startPropagation(propagate messaging.PropagationFunc, ro *onet.Roster, msg network.Message) error {
@@ -92,35 +88,6 @@ func (s *Service) startPropagation(propagate messaging.PropagationFunc, ro *onet
 	return nil
 }
 
-// saves all data.
-func (s *Service) save() {
-	s.storage.Lock()
-	defer s.storage.Unlock()
-	err := s.Save(storageID, s.storage)
-	if err != nil {
-		log.Error("Couldn't save data:", err)
-	}
-}
-
-// Tries to load the configuration and updates the data in the service
-// if it finds a valid config-file.
-func (s *Service) tryLoad() error {
-	s.storage = &storage{}
-	msg, err := s.Load(storageID)
-	if err != nil {
-		return err
-	}
-	if msg == nil {
-		return nil
-	}
-	var ok bool
-	s.storage, ok = msg.(*storage)
-	if !ok {
-		return errors.New("Data of wrong type")
-	}
-	return nil
-}
-
 // newService receives the context that holds information about the node it's
 // running on. Saving and loading can be done using the context. The data will
 // be stored in memory for tests and simulations, and on disk for real deployments.
@@ -132,15 +99,13 @@ func newService(c *onet.Context) (onet.Service, error) {
 		log.LLvl2(err)
 		return nil, errors.New("Couldn't register message")
 	}
-	if err := s.tryLoad(); err != nil {
-		log.Error(err)
-		return nil, err
-	}
 
 	var err error
 	s.propagateF, err = messaging.NewPropagationFunc(c, "Propagate", s.propagateHandler, -1)
 	if err != nil {
 		return nil, err
 	}
+	s.hash1 = sha1.New()
+	s.GetAdditionalBucket([]byte("bucket"))
 	return s, nil
 }
