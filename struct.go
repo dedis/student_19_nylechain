@@ -12,6 +12,7 @@ import (
 func init() {
 	network.RegisterMessages(
 		CoSi{}, CoSiReply{},
+		SubTreeArgs{}, SubTreeReply{},
 	)
 }
 
@@ -29,5 +30,17 @@ type CoSi struct {
 // CoSiReply returns the signature and the original message
 type CoSiReply struct {
 	Signature []byte
-	Message []byte
+	Message   []byte
+}
+
+// SubTreeArgs contains the arguments for the function GenerateSubTrees
+type SubTreeArgs struct {
+	Roster       *onet.Roster
+	BF           int
+	SubTreeCount int
+}
+
+// SubTreeReply contains the list of subtrees
+type SubTreeReply struct {
+	Trees []*onet.Tree
 }
