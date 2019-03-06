@@ -13,6 +13,7 @@ func init() {
 	network.RegisterMessages(
 		CoSi{}, CoSiReply{},
 		SubTreeArgs{}, SubTreeReply{},
+		CoSiTree{},
 	)
 }
 
@@ -31,6 +32,12 @@ type CoSi struct {
 type CoSiReply struct {
 	Signature []byte
 	Message   []byte
+}
+
+// CoSiTree is used when the tree is already constructed
+type CoSiTree struct {
+	Tree    *onet.Tree
+	Message []byte
 }
 
 // SubTreeArgs contains the arguments for the function GenerateSubTrees

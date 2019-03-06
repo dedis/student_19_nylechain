@@ -47,14 +47,19 @@ func TestService(t *testing.T) {
 	reply, _ := services[0].(*Service).GenerateSubTrees(
 		&SubTreeArgs{
 			Roster: roster,
-			BF: 2,
-			SubTreeCount: 3,
+			BF: 3,
+			SubTreeCount: 2,
 		},
 	)
 	for _, tree := range reply.Trees {
 		log.LLvl1("size :")
 		log.LLvl1(tree.Size())
 		log.LLvl1("-")
+		//services[0].(*Service).TreeBLSCoSi(&CoSiTree{
+		//	Tree: tree,
+		//	Message: msg,
+		//})
+
 		for _, node := range tree.List() {
 			log.LLvl1(node.RosterIndex)
 			if node.Parent != nil {

@@ -45,8 +45,8 @@ type Service struct {
 	propagateF messaging.PropagationFunc
 }
 
-// SimpleBLSCoSi starts a simpleblscosi-protocol and returns the final signature.
-// The client chooses the message to be signed.
+// SimpleBLSCoSi starts a simpleblscosi-protocol and returns the final signature on the specified roster.
+// The client chooses the message to be signed. It creates a binary tree then runs the protocol on it.
 func (s *Service) SimpleBLSCoSi(cosi *CoSi) (*CoSiReply, error) {
 	tree := cosi.Roster.GenerateNaryTreeWithRoot(2, s.ServerIdentity())
 	if tree == nil {
@@ -66,22 +66,36 @@ func (s *Service) SimpleBLSCoSi(cosi *CoSi) (*CoSiReply, error) {
 	return reply, nil
 }
 
+// TreeBLSCoSi is used when the tree is already constructed and runs the protocol on it.
+func (s *Service) TreeBLSCoSi(args *CoSiTree) (*CoSiReply, error) {
+	pi, err := s.CreateProtocol(protoName, args.Tree)
+	if err != nil {
+		return nil, err
+	}
+	pi.(*simpleblscosi.SimpleBLSCoSi).Message = args.Message
+	pi.Start()
+	reply := &CoSiReply{
+		Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
+		Message:   args.Message,
+	}
+	s.startPropagation(s.propagateF, args.Tree.Roster, reply)
+	return reply, nil
+}
+
 // GenerateSubTrees returns a list of nested trees, starting with the smallest one of height 1. The number of subtrees
 // returned needs to be specified, as well as the branching factor. The first n-1 subtrees are all perfect trees while
 // the last one is the full tree which uses every server of the specified roster (which should include the server itself).
 // Each tree is a subtree of every following tree in the list.
 func (s *Service) GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
 	if args.SubTreeCount < 1 {
-		log.Error("SubTreeCount must be positive")
-		return nil, nil
+		return nil, errors.New("SubTreeCount must be positive")
 	}
 
 	// The formula of the total number of nodes of a perfect k-ary tree is used to determine if the roster is large enough
 	// to return enough perfect subtrees. SubTreeCount is equal to the height of the largest subtree, which needs to
 	// have less total nodes that the full tree.
 	if (int(math.Pow(float64(args.BF), float64(args.SubTreeCount+1))-1) / (args.BF - 1)) >= len(args.Roster.List) {
-		log.Error("SubTreeCount too high/ Roster too small")
-		return nil, nil
+		return nil, errors.New("SubTreeCount too high/ Roster too small")
 	}
 	roster := args.Roster.NewRosterWithRoot(s.ServerIdentity())
 	var trees []*onet.Tree
