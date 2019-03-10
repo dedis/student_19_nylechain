@@ -53,6 +53,7 @@ func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, suite *pairing.
 
 // Dispatch will listen on the four channels we use (i.e. four steps)
 func (c *SimpleBLSCoSi) Dispatch() error {
+	log.LLvl1(c.ServerIdentity())
 	nbrChild := len(c.Children())
 	if !c.IsRoot() {
 		log.Lvl3(c.ServerIdentity(), "waiting for prepare")
@@ -166,10 +167,12 @@ func (c *SimpleBLSCoSi) handleCommit(in *SimpleCommit) error {
 	// check that the commit is correct with respect to the aggregate key
 	pk := bls.AggregatePublicKeys(c.suite, c.Publics()...)
 	err := bls.Verify(c.suite, pk, c.Message, in.AggrSig)
+	log.LLvl1(in.AggrSig)
 	if err != nil {
 		log.Error(c.ServerIdentity(), "commit verification failed with error: ", err.Error())
 		return err
 	}
+	log.LLvl1("ok")
 
 	// if we are leaf, then go to commitReply
 	if c.IsLeaf() {

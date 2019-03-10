@@ -6,13 +6,16 @@ runs on the node.
 */
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"errors"
 	"hash"
 	"math"
 	"time"
 
 	"go.dedis.ch/cothority/v3/messaging"
+	"go.dedis.ch/protobuf"
+
+	"go.etcd.io/bbolt"
 
 	"github.com/dedis/student_19_nylechain/simpleblscosi"
 	"go.dedis.ch/onet/v3"
@@ -40,7 +43,11 @@ type Service struct {
 	// are correctly handled.
 	*onet.ServiceProcessor
 
-	hash1 hash.Hash
+	db *bbolt.DB
+
+	bucketName []byte
+
+	hash256 hash.Hash
 
 	propagateF messaging.PropagationFunc
 }
@@ -66,27 +73,34 @@ func (s *Service) SimpleBLSCoSi(cosi *CoSi) (*CoSiReply, error) {
 	return reply, nil
 }
 
-// TreeBLSCoSi is used when the tree is already constructed and runs the protocol on it.
-func (s *Service) TreeBLSCoSi(args *CoSiTree) (*CoSiReply, error) {
-	pi, err := s.CreateProtocol(protoName, args.Tree)
-	if err != nil {
-		return nil, err
+// TreesBLSCoSi is used when multiple trees are already constructed and runs the protocol on them.
+func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
+	var signatures [][]byte
+	for _, tree := range args.Trees {
+		pi, err := s.CreateProtocol(protoName, tree)
+		if err != nil {
+			return nil, err
+		}
+		pi.(*simpleblscosi.SimpleBLSCoSi).Message = args.Message
+		pi.Start()
+		reply := &CoSiReply{
+			Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
+			Message:   args.Message,
+		}
+		s.startPropagation(s.propagateF, tree.Roster, reply)
+		signatures = append(signatures, reply.Signature)
 	}
-	pi.(*simpleblscosi.SimpleBLSCoSi).Message = args.Message
-	pi.Start()
-	reply := &CoSiReply{
-		Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
-		Message:   args.Message,
-	}
-	s.startPropagation(s.propagateF, args.Tree.Roster, reply)
-	return reply, nil
+	return &CoSiReplyTrees{
+		Signatures: signatures,
+		Message:    args.Message,
+	}, nil
 }
 
 // GenerateSubTrees returns a list of nested trees, starting with the smallest one of height 1. The number of subtrees
 // returned needs to be specified, as well as the branching factor. The first n-1 subtrees are all perfect trees while
-// the last one is the full tree which uses every server of the specified roster (which should include the server itself).
+// the last one is the full tree which uses every server of the specified rosters.
 // Each tree is a subtree of every following tree in the list.
-func (s *Service) GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
+func GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
 	if args.SubTreeCount < 1 {
 		return nil, errors.New("SubTreeCount must be positive")
 	}
@@ -97,16 +111,15 @@ func (s *Service) GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
 	if (int(math.Pow(float64(args.BF), float64(args.SubTreeCount+1))-1) / (args.BF - 1)) >= len(args.Roster.List) {
 		return nil, errors.New("SubTreeCount too high/ Roster too small")
 	}
-	roster := args.Roster.NewRosterWithRoot(s.ServerIdentity())
 	var trees []*onet.Tree
 
 	// We use the same formula again to specify the number of nodes for GenerateBigNaryTree. We iterate on the height.
 	for i := 1; i <= args.SubTreeCount; i++ {
-		tree := roster.GenerateBigNaryTree(args.BF, int(math.Pow(float64(args.BF), float64(i+1))-1)/(args.BF-1))
+		tree := args.Roster.GenerateBigNaryTree(args.BF, int(math.Pow(float64(args.BF), float64(i+1))-1)/(args.BF-1))
 		trees = append(trees, tree)
 	}
 
-	fullTree := roster.GenerateBigNaryTree(args.BF, len(roster.List))
+	fullTree := args.Roster.GenerateBigNaryTree(args.BF, len(args.Roster.List))
 	trees = append(trees, fullTree)
 	reply := &SubTreeReply{Trees: trees}
 	return reply, nil
@@ -116,8 +129,17 @@ func (s *Service) GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
 // It saves that CoSiReply in the service's bucket, keyed to a hash of the message.
 func (s *Service) propagateHandler(reply network.Message) {
 	message := reply.(*CoSiReply).Message
-	s.hash1.Write(message)
-	s.Save(s.hash1.Sum(nil), reply)
+	s.hash256.Write(message)
+	h := s.hash256.Sum(nil)
+	s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket(s.bucketName)
+		replyBytes, err := protobuf.Encode(reply.(*CoSiReply))
+		if err != nil {
+			return err
+		}
+		err = b.Put(h, replyBytes)
+		return err
+	})
 	return
 }
 
@@ -152,7 +174,9 @@ func newService(c *onet.Context) (onet.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.hash1 = sha1.New()
-	s.GetAdditionalBucket([]byte("bucket"))
+	s.hash256 = sha256.New()
+	db, bucketName := s.GetAdditionalBucket([]byte("bucket"))
+	s.db = db
+	s.bucketName = bucketName
 	return s, nil
 }
