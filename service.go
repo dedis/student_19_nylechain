@@ -115,7 +115,9 @@ func GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
 
 	// We use the same formula again to specify the number of nodes for GenerateBigNaryTree. We iterate on the height.
 	for i := 1; i <= args.SubTreeCount; i++ {
-		tree := args.Roster.GenerateBigNaryTree(args.BF, int(math.Pow(float64(args.BF), float64(i+1))-1)/(args.BF-1))
+		n := int(math.Pow(float64(args.BF), float64(i+1))-1)/(args.BF-1)
+		newRoster := onet.NewRoster(args.Roster.List[:n])
+		tree := newRoster.GenerateBigNaryTree(args.BF, n)
 		trees = append(trees, tree)
 	}
 
