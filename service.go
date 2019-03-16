@@ -8,8 +8,8 @@ runs on the node.
 import (
 	"crypto/sha256"
 	"errors"
-	"hash"
 	"math"
+	"sync"
 	"time"
 
 	"go.dedis.ch/cothority/v3/messaging"
@@ -47,8 +47,6 @@ type Service struct {
 
 	bucketName []byte
 
-	hash256 hash.Hash
-
 	propagateF messaging.PropagationFunc
 }
 
@@ -73,23 +71,28 @@ func (s *Service) SimpleBLSCoSi(cosi *CoSi) (*CoSiReply, error) {
 	return reply, nil
 }
 
-// TreesBLSCoSi is used when multiple trees are already constructed and runs the protocol on them.
+// TreesBLSCoSi is used when multiple trees are already constructed and runs the protocol on them concurrently.
+// The signatures returned are ordered like the corresponding trees received.
 func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
-	var signatures [][]byte
-	for _, tree := range args.Trees {
-		pi, err := s.CreateProtocol(protoName, tree)
-		if err != nil {
-			return nil, err
-		}
-		pi.(*simpleblscosi.SimpleBLSCoSi).Message = args.Message
-		pi.Start()
-		reply := &CoSiReply{
-			Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
-			Message:   args.Message,
-		}
-		s.startPropagation(s.propagateF, tree.Roster, reply)
-		signatures = append(signatures, reply.Signature)
+	var wg sync.WaitGroup
+	n := len(args.Trees)
+	wg.Add(n)
+	signatures := make([][]byte, n)
+	for i, tree := range args.Trees {
+		go func(i int, tree *onet.Tree) {
+			defer wg.Done()
+			pi, _ := s.CreateProtocol(protoName, tree)
+			pi.(*simpleblscosi.SimpleBLSCoSi).Message = args.Message
+			pi.Start()
+			reply := &CoSiReply{
+				Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
+				Message:   args.Message,
+			}
+			s.startPropagation(s.propagateF, tree.Roster, reply)
+			signatures[i] = reply.Signature
+		}(i, tree)
 	}
+	wg.Wait()
 	return &CoSiReplyTrees{
 		Signatures: signatures,
 		Message:    args.Message,
@@ -115,7 +118,7 @@ func GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
 
 	// We use the same formula again to specify the number of nodes for GenerateBigNaryTree. We iterate on the height.
 	for i := 1; i <= args.SubTreeCount; i++ {
-		n := int(math.Pow(float64(args.BF), float64(i+1))-1)/(args.BF-1)
+		n := int(math.Pow(float64(args.BF), float64(i+1))-1) / (args.BF - 1)
 		newRoster := onet.NewRoster(args.Roster.List[:n])
 		tree := newRoster.GenerateBigNaryTree(args.BF, n)
 		trees = append(trees, tree)
@@ -131,8 +134,9 @@ func GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
 // It saves that CoSiReply in the service's bucket, keyed to a hash of the message.
 func (s *Service) propagateHandler(reply network.Message) {
 	message := reply.(*CoSiReply).Message
-	s.hash256.Write(message)
-	h := s.hash256.Sum(nil)
+	sha := sha256.New()
+	sha.Write(message)
+	h := sha.Sum(nil)
 	s.db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket(s.bucketName)
 		replyBytes, err := protobuf.Encode(reply.(*CoSiReply))
@@ -176,7 +180,6 @@ func newService(c *onet.Context) (onet.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.hash256 = sha256.New()
 	db, bucketName := s.GetAdditionalBucket([]byte("bucket"))
 	s.db = db
 	s.bucketName = bucketName

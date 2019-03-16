@@ -113,11 +113,6 @@ func (c *SimpleBLSCoSi) handlePrepare(in *SimplePrepare) error {
 
 	// if we are leaf, we should go to prepare-reply
 	if c.IsLeaf() {
-		// do the verification
-		if err := c.vf(c.Message); err != nil {
-			log.Error(c.ServerIdentity(), "verification function failed with error: ", err)
-			return err
-		}
 		return c.handlePrepareReplies(nil)
 	}
 	// send to children
@@ -129,6 +124,11 @@ func (c *SimpleBLSCoSi) handlePrepare(in *SimplePrepare) error {
 // The children's commitment must remain constants.
 func (c *SimpleBLSCoSi) handlePrepareReplies(replies []*SimplePrepareReply) error {
 	log.Lvl3(c.ServerIdentity(), "aggregated")
+
+	if err := c.vf(c.Message); err != nil {
+		log.Error(c.ServerIdentity(), "verification function failed with error: ", err)
+		return err
+	}
 
 	// combine the signatures from the replies
 	mySig, err := bls.Sign(c.suite, c.Private(), c.Message)
