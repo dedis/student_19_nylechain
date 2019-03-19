@@ -1,14 +1,13 @@
 package simpleblscosi
 
 import (
-	"go.dedis.ch/kyber/v3"
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/network"
 )
 
 func init() {
 	network.RegisterMessages(&SimplePrepare{}, &SimplePrepareReply{},
-		&SimpleCommit{}, &SimpleCommitReply{}, &InnerTx{}, &Tx{})
+		&SimpleCommit{}, &SimpleCommitReply{})
 }
 
 // Prepare phase
@@ -59,16 +58,3 @@ type commitReplyChan struct {
 	SimpleCommitReply
 }
 
-// InnerTx does not include the signature
-type InnerTx struct {
-	ID         []byte
-	PreviousID []byte
-	SenderPK   kyber.Point
-	ReceiverPK kyber.Point
-}
-
-// Tx includes the signature of InnerTx
-type Tx struct {
-	Inner     InnerTx
-	Signature []byte
-}

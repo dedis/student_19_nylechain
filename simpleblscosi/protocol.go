@@ -1,6 +1,7 @@
 package simpleblscosi
 
 import (
+	"github.com/dedis/student_19_nylechain/transaction"
 	"go.dedis.ch/kyber/v3/pairing"
 	"go.dedis.ch/kyber/v3/sign/bls"
 	"go.dedis.ch/onet/v3"
@@ -36,7 +37,7 @@ func NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error)
 	suite := pairing.NewSuiteBn256()
 	// msg received is an encoded Tx struct
 	vf := func(msg []byte) error {
-		tx := Tx{}
+		tx := transaction.Tx{}
 		err := protobuf.Decode(msg, &tx)
 		if err != nil {
 			return err
