@@ -1,7 +1,6 @@
 package simpleblscosi
 
 import (
-	"github.com/dedis/student_19_nylechain/"
 	"go.dedis.ch/kyber/v3/pairing"
 	"go.dedis.ch/kyber/v3/sign/bls"
 	"go.dedis.ch/onet/v3"
@@ -45,8 +44,6 @@ func NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error)
 		// Verify that the signature was indeed produced by the sender
 		inner, _ := protobuf.Encode(&tx.Inner)
 		err = bls.Verify(suite, tx.Inner.SenderPK, inner, tx.Signature)
-		s := n.Host().Service("SimpleBLSCoSi")
-		s.(Service)
 		return err
 	}
 	return NewProtocol(n, vf, suite)
