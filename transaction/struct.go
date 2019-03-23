@@ -11,8 +11,8 @@ func init() {
 
 // InnerTx does not include the signature
 type InnerTx struct {
-	ID         []byte
-	PreviousID []byte
+	CoinID     []byte
+	PreviousTx []byte
 	SenderPK   kyber.Point
 	ReceiverPK kyber.Point
 }

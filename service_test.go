@@ -48,8 +48,8 @@ func TestGenerateSubTrees(t *testing.T) {
 	_, roster, _ := local.GenTree(20, true)
 	defer local.CloseAll()
 	subTreeReply, err := GenerateSubTrees(&SubTreeArgs{
-		Roster: roster,
-		BF: 2,
+		Roster:       roster,
+		BF:           2,
 		SubTreeCount: 3,
 	})
 	require.Nil(t, err)
@@ -61,8 +61,8 @@ func TestGenerateSubTrees(t *testing.T) {
 	}
 
 	subTreeReply, err = GenerateSubTrees(&SubTreeArgs{
-		Roster: roster,
-		BF: 4,
+		Roster:       roster,
+		BF:           4,
 		SubTreeCount: 1,
 	})
 	require.Nil(t, err)
@@ -79,18 +79,18 @@ func TestTreesBLSCoSi(t *testing.T) {
 	msg := []byte("test")
 	hosts, roster, _ := local.GenTree(9, true)
 
-	
 	defer local.CloseAll()
 	services := local.GetServices(hosts, SimpleBLSCoSiID)
 
 	subTreeReply, _ := GenerateSubTrees(&SubTreeArgs{
-		Roster: roster,
-		BF: 2,
+		Roster:       roster,
+		BF:           2,
 		SubTreeCount: 2,
 	})
 
 	coSiReplyTrees, _ := services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
-		Trees: subTreeReply.Trees,
+		Trees:   subTreeReply.Trees,
+		Roster:  roster,
 		Message: msg,
 	})
 	// subTreeReply and coSiReplyTrees contain respectively the trees and their signature in the same order.

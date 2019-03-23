@@ -1,12 +1,10 @@
 package simpleblscosi
 
 import (
-	"github.com/dedis/student_19_nylechain/transaction"
 	"go.dedis.ch/kyber/v3/pairing"
 	"go.dedis.ch/kyber/v3/sign/bls"
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/log"
-	"go.dedis.ch/protobuf"
 )
 
 // SimpleBLSCoSi is the main structure holding the round and the onet.Node.
@@ -34,20 +32,8 @@ type VerificationFn func(msg []byte) error
 // NewDefaultProtocol is the default protocol function used for registration
 // with an always-true verification.
 func NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error) {
-	suite := pairing.NewSuiteBn256()
-	// msg received is an encoded Tx struct
-	vf := func(msg []byte) error {
-		tx := transaction.Tx{}
-		err := protobuf.Decode(msg, &tx)
-		if err != nil {
-			return err
-		}
-		// Verify that the signature was indeed produced by the sender
-		inner, _ := protobuf.Encode(&tx.Inner)
-		err = bls.Verify(suite, tx.Inner.SenderPK, inner, tx.Signature)
-		return err
-	}
-	return NewProtocol(n, vf, suite)
+	vf := func(a []byte) error { return nil }
+	return NewProtocol(n, vf, pairing.NewSuiteBn256())
 }
 
 // NewProtocol is a callback that is executed when starting the protocol.
