@@ -6,9 +6,9 @@ import (
 )
 
 func init() {
-	network.RegisterMessages(&SimplePrepare{}, &SimplePrepareReply{}, &SimpleCommit{}, &SimpleCommitReply{})
+	network.RegisterMessages(&SimplePrepare{}, &SimplePrepareReply{},
+		&SimpleCommit{}, &SimpleCommitReply{})
 }
-
 
 // Prepare phase
 
@@ -57,3 +57,4 @@ type commitReplyChan struct {
 	*onet.TreeNode
 	SimpleCommitReply
 }
+

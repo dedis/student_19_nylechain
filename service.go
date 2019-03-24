@@ -6,6 +6,7 @@ runs on the node.
 */
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"errors"
 	"math"
@@ -17,7 +18,11 @@ import (
 
 	"go.etcd.io/bbolt"
 
+	"go.dedis.ch/kyber/v3/pairing"
+	"go.dedis.ch/kyber/v3/sign/bls"
+
 	"github.com/dedis/student_19_nylechain/simpleblscosi"
+	"github.com/dedis/student_19_nylechain/transaction"
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/log"
 	"go.dedis.ch/onet/v3/network"
@@ -27,13 +32,14 @@ import (
 var SimpleBLSCoSiID onet.ServiceID
 
 const protoName = "simpleBLSCoSi"
+const serviceName = "SimpleBLSCoSi"
 
 func init() {
 	var err error
 	if _, err := onet.GlobalProtocolRegister(protoName, simpleblscosi.NewDefaultProtocol); err != nil {
 		log.ErrFatal(err)
 	}
-	SimpleBLSCoSiID, err = onet.RegisterNewService("SimpleBLSCoSi", newService)
+	SimpleBLSCoSiID, err = onet.RegisterNewService(serviceName, newService)
 	log.ErrFatal(err)
 }
 
@@ -45,7 +51,8 @@ type Service struct {
 
 	db *bbolt.DB
 
-	bucketName []byte
+	bucketNameTx     []byte
+	bucketNameLastTx []byte
 
 	propagateF messaging.PropagationFunc
 }
@@ -67,13 +74,101 @@ func (s *Service) SimpleBLSCoSi(cosi *CoSi) (*CoSiReply, error) {
 		Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
 		Message:   cosi.Message,
 	}
-	s.startPropagation(s.propagateF, cosi.Roster, reply)
+	// s.startPropagation(s.propagateF, cosi.Roster, reply)
 	return reply, nil
 }
 
+// NewDefaultProtocol is the default protocol function, with a verification function that checks transactions.
+func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error) {
+	suite := pairing.NewSuiteBn256()
+	// msg received is an encoded Tx struct
+	vf := func(msg []byte) error {
+		tx := transaction.Tx{}
+		err := protobuf.Decode(msg, &tx)
+		if err != nil {
+			return err
+		}
+
+		// Verify that the signature was indeed produced by the sender
+		inner, _ := protobuf.Encode(&tx.Inner)
+		err = bls.Verify(suite, tx.Inner.SenderPK, inner, tx.Signature)
+		if err != nil {
+			return err
+		}
+
+		// Verify that the previous transaction is the last one of the chain
+		s.db.View(func(bboltTx *bbolt.Tx) error {
+			b := bboltTx.Bucket(s.bucketNameLastTx)
+			v := b.Get(tx.Inner.CoinID)
+			if bytes.Compare(v, tx.Inner.PreviousTx) != 0 {
+				return errors.New("The previous transaction is not the last of the chain")
+			}
+			return nil
+		})
+
+		// Verify that the last transaction's receiver is the current transaction's sender
+		s.db.View(func(bboltTx *bbolt.Tx) error {
+			b := bboltTx.Bucket(s.bucketNameTx)
+			v := b.Get(tx.Inner.PreviousTx)
+			prevTx := transaction.Tx{}
+			err = protobuf.Decode(v, &prevTx)
+			if err != nil {
+				return err
+			}
+			if prevTx.Inner.ReceiverPK != tx.Inner.SenderPK {
+				return errors.New("Previous transaction's receiver isn't current sender")
+			}
+			return nil
+		})
+
+		return nil
+	}
+	return simpleblscosi.NewProtocol(n, vf, suite)
+}
+
+// GenesisTx creates and stores a genesis Tx with the specified ID (its key in the main bucket), CoinID and receiverPK.
+// This will be the previousTx of the first real Tx, which needs it to pass the verification function.
+func (s *Service) GenesisTx(args *GenesisArgs) error {
+	tx, err := protobuf.Encode(&transaction.Tx{Inner: transaction.InnerTx{ReceiverPK: args.ReceiverPK}})
+	if err != nil {
+		return err
+	}
+	s.db.Update(func(bboltTx *bbolt.Tx) error {
+		// Store in the main bucket
+		b := bboltTx.Bucket(s.bucketNameTx)
+		err = b.Put(args.ID, tx)
+		if err != nil {
+			return err
+		}
+		// Store as last transaction in the LastTx bucket
+		b = bboltTx.Bucket(s.bucketNameLastTx)
+		err = b.Put(args.CoinID, tx)
+		return err
+	})
+	return nil
+}
+
 // TreesBLSCoSi is used when multiple trees are already constructed and runs the protocol on them concurrently.
+// It propagates the transaction and the aggregate signatures so that they're stored.
 // The signatures returned are ordered like the corresponding trees received.
 func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
+	tx := transaction.Tx{}
+	err := protobuf.Decode(args.Message, &tx)
+	if err != nil {
+		return nil, err
+	}
+	// We send the initialization on the entire roster before sending signatures
+	sha := sha256.New()
+	sha.Write(args.Message)
+	h := sha.Sum(nil)
+	data := PropagateData{
+		Initialization: true,
+		TxID:           h,
+		Tx:             tx,
+	}
+
+	s.startPropagation(s.propagateF, args.Roster, &data)
+
 	var wg sync.WaitGroup
 	n := len(args.Trees)
 	wg.Add(n)
@@ -84,12 +179,16 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 			pi, _ := s.CreateProtocol(protoName, tree)
 			pi.(*simpleblscosi.SimpleBLSCoSi).Message = args.Message
 			pi.Start()
-			reply := &CoSiReply{
-				Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
-				Message:   args.Message,
+			// Send signatures one by one after the initialization
+			data := &PropagateData{
+				Initialization: false,
+				TxID:           h,
+				Signature:      <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
+				CoinID:         tx.Inner.CoinID,
 			}
-			s.startPropagation(s.propagateF, tree.Roster, reply)
-			signatures[i] = reply.Signature
+			// Only propagate to that specific tree's roster
+			s.startPropagation(s.propagateF, tree.Roster, data)
+			signatures[i] = data.Signature
 		}(i, tree)
 	}
 	wg.Wait()
@@ -97,6 +196,66 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 		Signatures: signatures,
 		Message:    args.Message,
 	}, nil
+}
+
+// propagateHandler receives a *PropagateData. It stores the transaction and its aggregate signatures in the "Tx"
+// bucket, and tracks the last transaction for each coin in the "LastTx" bucket.
+func (s *Service) propagateHandler(msg network.Message) {
+	data := msg.(*PropagateData)
+	// Initialization : the Tx is received but no aggregate signature yet, so we only store Tx.
+	if data.Initialization {
+		s.db.Update(func(bboltTx *bbolt.Tx) error {
+			b := bboltTx.Bucket(s.bucketNameTx)
+			txStorage, err := protobuf.Encode(&TxStorage{
+				Tx: data.Tx,
+			})
+			if err != nil {
+				return err
+			}
+			err = b.Put(data.TxID, txStorage)
+			return err
+		})
+		return
+	}
+
+	// Non-initialization : we received a new aggregate structure that we need to store.
+	s.db.Update(func(bboltTx *bbolt.Tx) error {
+		b := bboltTx.Bucket(s.bucketNameTx)
+		v := b.Get(data.TxID)
+		storage := &TxStorage{}
+		err := protobuf.Decode(v, storage)
+		if err != nil {
+			return err
+		}
+		storage.Signatures = append(storage.Signatures, data.Signature)
+		storageEncoded, err := protobuf.Encode(storage)
+		if err != nil {
+			return err
+		}
+		err = b.Put(data.TxID, storageEncoded)
+		if err != nil {
+			return err
+		}
+		// Update LastTx bucket too
+		b = bboltTx.Bucket(s.bucketNameLastTx)
+		err = b.Put(data.CoinID, data.TxID)
+		return err
+	})
+	return
+}
+
+func (s *Service) startPropagation(propagate messaging.PropagationFunc, ro *onet.Roster, msg network.Message) error {
+
+	replies, err := propagate(ro, msg, 10*time.Second)
+	if err != nil {
+		return err
+	}
+
+	if replies != len(ro.List) {
+		log.Lvl1(s.ServerIdentity(), "Only got", replies, "out of", len(ro.List))
+	}
+
+	return nil
 }
 
 // GenerateSubTrees returns a list of nested trees, starting with the smallest one of height 1. The number of subtrees
@@ -126,41 +285,11 @@ func GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
 
 	fullTree := args.Roster.GenerateBigNaryTree(args.BF, len(args.Roster.List))
 	trees = append(trees, fullTree)
-	reply := &SubTreeReply{Trees: trees}
+	reply := &SubTreeReply{
+		Trees:  trees,
+		Roster: args.Roster,
+	}
 	return reply, nil
-}
-
-// propagateHandler receives a *CoSiReply containing both the initial message and the signature.
-// It saves that CoSiReply in the service's bucket, keyed to a hash of the message.
-func (s *Service) propagateHandler(reply network.Message) {
-	message := reply.(*CoSiReply).Message
-	sha := sha256.New()
-	sha.Write(message)
-	h := sha.Sum(nil)
-	s.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket(s.bucketName)
-		replyBytes, err := protobuf.Encode(reply.(*CoSiReply))
-		if err != nil {
-			return err
-		}
-		err = b.Put(h, replyBytes)
-		return err
-	})
-	return
-}
-
-func (s *Service) startPropagation(propagate messaging.PropagationFunc, ro *onet.Roster, msg network.Message) error {
-
-	replies, err := propagate(ro, msg, 10*time.Second)
-	if err != nil {
-		return err
-	}
-
-	if replies != len(ro.List) {
-		log.Lvl1(s.ServerIdentity(), "Only got", replies, "out of", len(ro.List))
-	}
-
-	return nil
 }
 
 // newService receives the context that holds information about the node it's
@@ -170,6 +299,7 @@ func newService(c *onet.Context) (onet.Service, error) {
 	s := &Service{
 		ServiceProcessor: onet.NewServiceProcessor(c),
 	}
+	c.ProtocolRegister(protoName, s.NewDefaultProtocol)
 	if err := s.RegisterHandler(s.SimpleBLSCoSi); err != nil {
 		log.LLvl2(err)
 		return nil, errors.New("Couldn't register message")
@@ -180,8 +310,10 @@ func newService(c *onet.Context) (onet.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	db, bucketName := s.GetAdditionalBucket([]byte("bucket"))
+	db, bucketNameTx := s.GetAdditionalBucket([]byte("Tx"))
+	_, bucketNameLastTx := s.GetAdditionalBucket([]byte("LastTx"))
+	s.bucketNameTx = bucketNameTx
+	s.bucketNameLastTx = bucketNameLastTx
 	s.db = db
-	s.bucketName = bucketName
 	return s, nil
 }

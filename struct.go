@@ -5,6 +5,8 @@ This holds the messages used to communicate with the service over the network.
 */
 
 import (
+	"github.com/dedis/student_19_nylechain/transaction"
+	"go.dedis.ch/kyber/v3"
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/network"
 )
@@ -14,6 +16,8 @@ func init() {
 		CoSi{}, CoSiReply{},
 		SubTreeArgs{}, SubTreeReply{},
 		CoSiTrees{}, CoSiReplyTrees{},
+		TxStorage{}, PropagateData{},
+		GenesisArgs{},
 	)
 }
 
@@ -34,9 +38,20 @@ type CoSiReply struct {
 	Message   []byte
 }
 
-// CoSiTrees contains multiple trees
+// PropagateData is what is received by propagateHandler. It's first received with argument initialization "true"
+// and the Tx. Then, it will be received once for each new Signature. It's propagated by TreesBLSCoSi.
+type PropagateData struct {
+	Initialization bool
+	TxID           []byte
+	Tx             transaction.Tx
+	Signature      []byte
+	CoinID         []byte
+}
+
+// CoSiTrees contains multiple trees and the complete roster.
 type CoSiTrees struct {
 	Trees   []*onet.Tree
+	Roster  *onet.Roster
 	Message []byte
 }
 
@@ -53,7 +68,21 @@ type SubTreeArgs struct {
 	SubTreeCount int
 }
 
-// SubTreeReply contains the list of subtrees
+// SubTreeReply contains the list of subtrees and the complete roster
 type SubTreeReply struct {
-	Trees []*onet.Tree
+	Trees  []*onet.Tree
+	Roster *onet.Roster
+}
+
+// GenesisArgs contains the arguments necessary to create a genesis Tx
+type GenesisArgs struct {
+	ID         []byte
+	CoinID     []byte
+	ReceiverPK kyber.Point
+}
+
+// TxStorage is what is stored in boltdb. It contains the transaction and its aggregate signatures
+type TxStorage struct {
+	Tx         transaction.Tx
+	Signatures [][]byte
 }
