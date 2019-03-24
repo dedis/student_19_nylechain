@@ -96,6 +96,16 @@ func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolIns
 			return err
 		}
 
+		// Verify that the previous transaction is the last one of the chain
+		s.db.View(func(bboltTx *bbolt.Tx) error {
+			b := bboltTx.Bucket(s.bucketNameLastTx)
+			v := b.Get(tx.Inner.CoinID)
+			if bytes.Compare(v, tx.Inner.PreviousTx) != 0 {
+				return errors.New("The previous transaction is not the last of the chain")
+			}
+			return nil
+		})
+
 		// Verify that the last transaction's receiver is the current transaction's sender
 		s.db.View(func(bboltTx *bbolt.Tx) error {
 			b := bboltTx.Bucket(s.bucketNameTx)
@@ -107,16 +117,6 @@ func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolIns
 			}
 			if prevTx.Inner.ReceiverPK != tx.Inner.SenderPK {
 				return errors.New("Previous transaction's receiver isn't current sender")
-			}
-			return nil
-		})
-
-		// Verify that the transaction is the last one of the chain
-		s.db.View(func(bboltTx *bbolt.Tx) error {
-			b := bboltTx.Bucket(s.bucketNameLastTx)
-			v := b.Get(tx.Inner.CoinID)
-			if bytes.Compare(v, msg) != 0 {
-				return errors.New("This transaction is not the last of the chain")
 			}
 			return nil
 		})
@@ -174,14 +174,36 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	}, nil
 }
 
-// propagateHandler receives a *PropagateData. It saves the transaction and its aggregate signatures in the "Tx"
+// GenesisTx creates and stores a genesis Tx with the specified ID (its key in boltdb), CoinID and receiverPK.
+// This will be the previousTx of the first real Tx, which needs it to pass the verification function.
+func (s *Service) GenesisTx(args *GenesisArgs) error {
+	tx, err := protobuf.Encode(&transaction.Tx{Inner: transaction.InnerTx{ReceiverPK: args.ReceiverPK}})
+	if err != nil {
+		return err
+	}
+	s.db.Update(func(bboltTx *bbolt.Tx) error {
+		// Store in the main bucket
+		b := bboltTx.Bucket(s.bucketNameTx)
+		err = b.Put(args.ID, tx)
+		if err != nil {
+			return err
+		}
+		// Store as last transaction in the LastTx bucket
+		b = bboltTx.Bucket(s.bucketNameLastTx)
+		err = b.Put(args.CoinID, tx)
+		return err
+	})
+	return nil
+}
+
+// propagateHandler receives a *PropagateData. It stores the transaction and its aggregate signatures in the "Tx"
 // bucket, and tracks the last transaction for each coin in the "LastTx" bucket.
 func (s *Service) propagateHandler(msg network.Message) {
 	data := msg.(*PropagateData)
 	// Initialization : the Tx is received but no aggregate signature yet, so we only store Tx.
 	if data.Initialization {
-		s.db.Update(func(tx *bbolt.Tx) error {
-			b := tx.Bucket(s.bucketNameTx)
+		s.db.Update(func(bboltTx *bbolt.Tx) error {
+			b := bboltTx.Bucket(s.bucketNameTx)
 			txStorage, err := protobuf.Encode(TxStorage{
 				Tx: data.Tx,
 			})
@@ -195,8 +217,8 @@ func (s *Service) propagateHandler(msg network.Message) {
 	}
 
 	// Non-initialization : we received a new aggregate structure that we need to store.
-	s.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket(s.bucketNameTx)
+	s.db.Update(func(bboltTx *bbolt.Tx) error {
+		b := bboltTx.Bucket(s.bucketNameTx)
 		v := b.Get(data.TxID)
 		storage := &TxStorage{}
 		err := protobuf.Decode(v, storage)
@@ -213,7 +235,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 			return err
 		}
 		// Update LastTx bucket too
-		b = tx.Bucket(s.bucketNameLastTx)
+		b = bboltTx.Bucket(s.bucketNameLastTx)
 		err = b.Put(data.CoinID, data.TxID)
 		return err
 	})
