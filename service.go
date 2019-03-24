@@ -126,7 +126,30 @@ func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolIns
 	return simpleblscosi.NewProtocol(n, vf, suite)
 }
 
+// GenesisTx creates and stores a genesis Tx with the specified ID (its key in the main bucket), CoinID and receiverPK.
+// This will be the previousTx of the first real Tx, which needs it to pass the verification function.
+func (s *Service) GenesisTx(args *GenesisArgs) error {
+	tx, err := protobuf.Encode(&transaction.Tx{Inner: transaction.InnerTx{ReceiverPK: args.ReceiverPK}})
+	if err != nil {
+		return err
+	}
+	s.db.Update(func(bboltTx *bbolt.Tx) error {
+		// Store in the main bucket
+		b := bboltTx.Bucket(s.bucketNameTx)
+		err = b.Put(args.ID, tx)
+		if err != nil {
+			return err
+		}
+		// Store as last transaction in the LastTx bucket
+		b = bboltTx.Bucket(s.bucketNameLastTx)
+		err = b.Put(args.CoinID, tx)
+		return err
+	})
+	return nil
+}
+
 // TreesBLSCoSi is used when multiple trees are already constructed and runs the protocol on them concurrently.
+// It propagates the transaction and the aggregate signatures so that they're stored.
 // The signatures returned are ordered like the corresponding trees received.
 func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	tx := transaction.Tx{}
@@ -143,7 +166,8 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 		TxID:           h,
 		Tx:             tx,
 	}
-	s.startPropagation(s.propagateF, args.Roster, data)
+
+	s.startPropagation(s.propagateF, args.Roster, &data)
 
 	var wg sync.WaitGroup
 	n := len(args.Trees)
@@ -174,28 +198,6 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	}, nil
 }
 
-// GenesisTx creates and stores a genesis Tx with the specified ID (its key in boltdb), CoinID and receiverPK.
-// This will be the previousTx of the first real Tx, which needs it to pass the verification function.
-func (s *Service) GenesisTx(args *GenesisArgs) error {
-	tx, err := protobuf.Encode(&transaction.Tx{Inner: transaction.InnerTx{ReceiverPK: args.ReceiverPK}})
-	if err != nil {
-		return err
-	}
-	s.db.Update(func(bboltTx *bbolt.Tx) error {
-		// Store in the main bucket
-		b := bboltTx.Bucket(s.bucketNameTx)
-		err = b.Put(args.ID, tx)
-		if err != nil {
-			return err
-		}
-		// Store as last transaction in the LastTx bucket
-		b = bboltTx.Bucket(s.bucketNameLastTx)
-		err = b.Put(args.CoinID, tx)
-		return err
-	})
-	return nil
-}
-
 // propagateHandler receives a *PropagateData. It stores the transaction and its aggregate signatures in the "Tx"
 // bucket, and tracks the last transaction for each coin in the "LastTx" bucket.
 func (s *Service) propagateHandler(msg network.Message) {
@@ -204,7 +206,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 	if data.Initialization {
 		s.db.Update(func(bboltTx *bbolt.Tx) error {
 			b := bboltTx.Bucket(s.bucketNameTx)
-			txStorage, err := protobuf.Encode(TxStorage{
+			txStorage, err := protobuf.Encode(&TxStorage{
 				Tx: data.Tx,
 			})
 			if err != nil {

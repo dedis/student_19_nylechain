@@ -3,6 +3,10 @@ package nylechain
 import (
 	"testing"
 
+	"go.dedis.ch/protobuf"
+
+	"github.com/dedis/student_19_nylechain/transaction"
+
 	"go.dedis.ch/kyber/v3/sign/bls"
 
 	"go.dedis.ch/kyber/v3/pairing"
@@ -76,31 +80,41 @@ func TestGenerateSubTrees(t *testing.T) {
 
 func TestTreesBLSCoSi(t *testing.T) {
 	local := onet.NewTCPTest(testSuite)
-	msg := []byte("test")
 	hosts, roster, _ := local.GenTree(9, true)
-
 	defer local.CloseAll()
 	services := local.GetServices(hosts, SimpleBLSCoSiID)
+	PK0 := hosts[0].ServerIdentity.Public
+	PK1 := hosts[1].ServerIdentity.Public
 
+	for _, s := range services {
+		s.(*Service).GenesisTx(&GenesisArgs{
+			ID:         []byte("Genesis0"),
+			CoinID:     []byte("0"),
+			ReceiverPK: PK0,
+		})
+	}
+	inner := transaction.InnerTx{
+		CoinID:     []byte("0"),
+		PreviousTx: []byte("Genesis0"),
+		SenderPK:   PK0,
+		ReceiverPK: PK1,
+	}
+	innerEncoded, _ := protobuf.Encode(&inner)
+	signature, _ := bls.Sign(testSuite, hosts[0].ServerIdentity.GetPrivate(), innerEncoded)
+	tx := transaction.Tx{
+		Inner:     inner,
+		Signature: signature,
+	}
+	txEncoded, _ := protobuf.Encode(&tx)
 	subTreeReply, _ := GenerateSubTrees(&SubTreeArgs{
 		Roster:       roster,
 		BF:           2,
 		SubTreeCount: 2,
 	})
 
-	coSiReplyTrees, _ := services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
+	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
 		Trees:   subTreeReply.Trees,
 		Roster:  roster,
-		Message: msg,
+		Message: txEncoded,
 	})
-	// subTreeReply and coSiReplyTrees contain respectively the trees and their signature in the same order.
-	// Thus, we use i to access the tree corresponding to the signature, iterate on its roster to compute
-	// aggPublic so that we can verify the signature in the end.
-	for i, sig := range coSiReplyTrees.Signatures {
-		aggPublic := testSuite.Point().Null()
-		for _, r := range subTreeReply.Trees[i].Roster.List {
-			aggPublic = aggPublic.Add(aggPublic, r.Public)
-		}
-		require.NoError(t, bls.Verify(testSuite, aggPublic, msg, sig))
-	}
 }
