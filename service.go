@@ -146,13 +146,14 @@ func (s *Service) GenesisTx(args *GenesisArgs) error {
 		}
 		// Store as last transaction in the LastTx bucket
 		b = bboltTx.Bucket(s.bucketNameLastTx)
-		err = b.Put(args.CoinID, tx)
+		err = b.Put(args.CoinID, args.ID)
 		return err
 	})
 	return nil
 }
 
 // TreesBLSCoSi is used when multiple trees are already constructed and runs the protocol on them concurrently.
+// The "Message" argument is always an encoded transaction.
 // It propagates the transaction and the aggregate signatures so that they're stored.
 // The signatures returned are ordered like the corresponding trees received.
 func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
