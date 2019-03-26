@@ -97,7 +97,7 @@ func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolIns
 		}
 
 		// Verify that the previous transaction is the last one of the chain
-		s.db.View(func(bboltTx *bbolt.Tx) error {
+		err = s.db.View(func(bboltTx *bbolt.Tx) error {
 			b := bboltTx.Bucket(s.bucketNameLastTx)
 			v := b.Get(tx.Inner.CoinID)
 			if bytes.Compare(v, tx.Inner.PreviousTx) != 0 {
@@ -106,8 +106,12 @@ func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolIns
 			return nil
 		})
 
+		if err != nil {
+			return err
+		}
+
 		// Verify that the last transaction's receiver is the current transaction's sender
-		s.db.View(func(bboltTx *bbolt.Tx) error {
+		err = s.db.View(func(bboltTx *bbolt.Tx) error {
 			b := bboltTx.Bucket(s.bucketNameTx)
 			v := b.Get(tx.Inner.PreviousTx)
 			prevTx := transaction.Tx{}
@@ -121,7 +125,7 @@ func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolIns
 			return nil
 		})
 
-		return nil
+		return err
 	}
 	return simpleblscosi.NewProtocol(n, vf, suite)
 }

@@ -81,7 +81,7 @@ type GenesisArgs struct {
 	ReceiverPK kyber.Point
 }
 
-// TxStorage is what is stored in boltdb. It contains the transaction and its aggregate signatures
+// TxStorage is what is stored in boltdb's main bucket. It contains the transaction and its aggregate signatures
 type TxStorage struct {
 	Tx         transaction.Tx
 	Signatures [][]byte

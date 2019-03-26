@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"go.dedis.ch/protobuf"
+	"go.etcd.io/bbolt"
 
 	"github.com/dedis/student_19_nylechain/transaction"
 
@@ -85,17 +86,19 @@ func TestTreesBLSCoSi(t *testing.T) {
 	services := local.GetServices(hosts, SimpleBLSCoSiID)
 	PK0 := hosts[0].ServerIdentity.Public
 	PK1 := hosts[1].ServerIdentity.Public
+	iD := []byte("Genesis0")
+	coinID := []byte("0")
 
 	for _, s := range services {
 		s.(*Service).GenesisTx(&GenesisArgs{
-			ID:         []byte("Genesis0"),
-			CoinID:     []byte("0"),
+			ID:         iD,
+			CoinID:     coinID,
 			ReceiverPK: PK0,
 		})
 	}
 	inner := transaction.InnerTx{
-		CoinID:     []byte("0"),
-		PreviousTx: []byte("Genesis0"),
+		CoinID:     coinID,
+		PreviousTx: iD,
 		SenderPK:   PK0,
 		ReceiverPK: PK1,
 	}
@@ -117,4 +120,18 @@ func TestTreesBLSCoSi(t *testing.T) {
 		Roster:  roster,
 		Message: txEncoded,
 	})
+	for i := 0; i < 9; i++ {
+		services[i].(*Service).db.View(func(bboltTx *bbolt.Tx) error {
+			b := bboltTx.Bucket(services[i].(*Service).bucketNameLastTx)
+			v := b.Get(coinID)
+			b = bboltTx.Bucket(services[i].(*Service).bucketNameTx)
+			v = b.Get(v)
+			txStorage := TxStorage{}
+			protobuf.Decode(v, &txStorage)
+			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PK0))
+
+			return nil
+		})
+	}
+
 }
