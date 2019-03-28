@@ -23,31 +23,6 @@ func TestMain(m *testing.M) {
 	log.MainTest(m)
 }
 
-func TestSimpleBLSCoSi(t *testing.T) {
-	local := onet.NewTCPTest(testSuite)
-	msg := []byte("message test")
-	aggPublic := testSuite.Point().Null()
-	hosts, roster, _ := local.GenTree(4, true)
-
-	for _, r := range roster.List {
-		aggPublic = aggPublic.Add(aggPublic, r.Public)
-	}
-	defer local.CloseAll()
-	services := local.GetServices(hosts, SimpleBLSCoSiID)
-
-	for _, s := range services {
-		log.Lvl2("Sending request to", s)
-		resp, err := s.(*Service).SimpleBLSCoSi(
-			&CoSi{
-				Roster:  roster,
-				Message: msg,
-			},
-		)
-		require.NoError(t, bls.Verify(testSuite, aggPublic, msg, resp.Signature))
-		require.Nil(t, err)
-	}
-}
-
 func TestGenerateSubTrees(t *testing.T) {
 	local := onet.NewTCPTest(testSuite)
 	_, roster, _ := local.GenTree(20, true)
@@ -84,6 +59,12 @@ func TestTreesBLSCoSi(t *testing.T) {
 	hosts, roster, _ := local.GenTree(9, true)
 	defer local.CloseAll()
 	services := local.GetServices(hosts, SimpleBLSCoSiID)
+
+	subTreeReply, _ := GenerateSubTrees(&SubTreeArgs{
+		Roster:       roster,
+		BF:           2,
+		SubTreeCount: 2,
+	})
 	PK0 := hosts[0].ServerIdentity.Public
 	PK1 := hosts[1].ServerIdentity.Public
 	iD := []byte("Genesis0")
@@ -93,6 +74,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 		s.(*Service).GenesisTx(&GenesisArgs{
 			ID:         iD,
 			CoinID:     coinID,
+			TreeIDs:    subTreeReply.IDs,
 			ReceiverPK: PK0,
 		})
 	}
@@ -109,11 +91,6 @@ func TestTreesBLSCoSi(t *testing.T) {
 		Signature: signature,
 	}
 	txEncoded, _ := protobuf.Encode(&tx)
-	subTreeReply, _ := GenerateSubTrees(&SubTreeArgs{
-		Roster:       roster,
-		BF:           2,
-		SubTreeCount: 2,
-	})
 
 	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
 		Trees:   subTreeReply.Trees,
@@ -128,6 +105,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 			v = b.Get(v)
 			txStorage := TxStorage{}
 			protobuf.Decode(v, &txStorage)
+			asdfasd
 			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PK0))
 
 			return nil

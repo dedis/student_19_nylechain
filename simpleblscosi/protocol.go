@@ -27,12 +27,12 @@ type SimpleBLSCoSi struct {
 }
 
 // VerificationFn is a verification functions
-type VerificationFn func(msg []byte) error
+type VerificationFn func(msg []byte, id onet.TreeID) error
 
 // NewDefaultProtocol is the default protocol function used for registration
 // with an always-true verification.
 func NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error) {
-	vf := func(a []byte) error { return nil }
+	vf := func(a []byte, id onet.TreeID) error { return nil }
 	return NewProtocol(n, vf, pairing.NewSuiteBn256())
 }
 
@@ -125,7 +125,7 @@ func (c *SimpleBLSCoSi) handlePrepare(in *SimplePrepare) error {
 func (c *SimpleBLSCoSi) handlePrepareReplies(replies []*SimplePrepareReply) error {
 	log.Lvl3(c.ServerIdentity(), "aggregated")
 
-	if err := c.vf(c.Message); err != nil {
+	if err := c.vf(c.Message, c.Tree().ID); err != nil {
 		log.Error(c.ServerIdentity(), "verification function failed with error: ", err)
 		return err
 	}

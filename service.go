@@ -36,9 +36,6 @@ const serviceName = "SimpleBLSCoSi"
 
 func init() {
 	var err error
-	if _, err := onet.GlobalProtocolRegister(protoName, simpleblscosi.NewDefaultProtocol); err != nil {
-		log.ErrFatal(err)
-	}
 	SimpleBLSCoSiID, err = onet.RegisterNewService(serviceName, newService)
 	log.ErrFatal(err)
 }
@@ -51,7 +48,10 @@ type Service struct {
 
 	db *bbolt.DB
 
-	bucketNameTx     []byte
+	// Stores each transaction and its aggregate signatures (struct TxStorage), keyed to a hash of the encoded Tx.
+	bucketNameTx []byte
+	// Stores the last Tx, hashed (its key in the first bucket) for each CoinID and Tree,
+	// keyed to a concatenation of TreeID + CoinID
 	bucketNameLastTx []byte
 
 	propagateF messaging.PropagationFunc
@@ -82,7 +82,7 @@ func (s *Service) SimpleBLSCoSi(cosi *CoSi) (*CoSiReply, error) {
 func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error) {
 	suite := pairing.NewSuiteBn256()
 	// msg received is an encoded Tx struct
-	vf := func(msg []byte) error {
+	vf := func(msg []byte, id onet.TreeID) error {
 		tx := transaction.Tx{}
 		err := protobuf.Decode(msg, &tx)
 		if err != nil {
@@ -99,7 +99,7 @@ func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolIns
 		// Verify that the previous transaction is the last one of the chain
 		err = s.db.View(func(bboltTx *bbolt.Tx) error {
 			b := bboltTx.Bucket(s.bucketNameLastTx)
-			v := b.Get(tx.Inner.CoinID)
+			v := b.Get(append([]byte(id.String()), tx.Inner.CoinID...))
 			if bytes.Compare(v, tx.Inner.PreviousTx) != 0 {
 				return errors.New("The previous transaction is not the last of the chain")
 			}
@@ -119,7 +119,7 @@ func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolIns
 			if err != nil {
 				return err
 			}
-			if prevTx.Inner.ReceiverPK != tx.Inner.SenderPK {
+			if !prevTx.Inner.ReceiverPK.Equal(tx.Inner.SenderPK) {
 				return errors.New("Previous transaction's receiver isn't current sender")
 			}
 			return nil
@@ -132,24 +132,31 @@ func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolIns
 
 // GenesisTx creates and stores a genesis Tx with the specified ID (its key in the main bucket), CoinID and receiverPK.
 // This will be the previousTx of the first real Tx, which needs it to pass the verification function.
+// It also takes the IDs of the trees where the first Tx will be run, so that the genesis Tx can be stored
+// as last transaction for each of the trees in the second boltdb bucket.
 func (s *Service) GenesisTx(args *GenesisArgs) error {
 	tx, err := protobuf.Encode(&transaction.Tx{Inner: transaction.InnerTx{ReceiverPK: args.ReceiverPK}})
 	if err != nil {
 		return err
 	}
-	s.db.Update(func(bboltTx *bbolt.Tx) error {
+	err = s.db.Update(func(bboltTx *bbolt.Tx) error {
 		// Store in the main bucket
 		b := bboltTx.Bucket(s.bucketNameTx)
 		err = b.Put(args.ID, tx)
 		if err != nil {
 			return err
 		}
-		// Store as last transaction in the LastTx bucket
+		// Store as last transaction in the LastTx bucket for every TreeID
 		b = bboltTx.Bucket(s.bucketNameLastTx)
-		err = b.Put(args.CoinID, args.ID)
-		return err
+		for _, id := range args.TreeIDs {
+			err = b.Put(append([]byte(id.String()), args.CoinID...), args.ID)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
 	})
-	return nil
+	return err
 }
 
 // TreesBLSCoSi is used when multiple trees are already constructed and runs the protocol on them concurrently.
@@ -189,6 +196,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 				Initialization: false,
 				TxID:           h,
 				Signature:      <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
+				TreeID:         tree.ID,
 				CoinID:         tx.Inner.CoinID,
 			}
 			// Only propagate to that specific tree's roster
@@ -243,7 +251,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 		}
 		// Update LastTx bucket too
 		b = bboltTx.Bucket(s.bucketNameLastTx)
-		err = b.Put(data.CoinID, data.TxID)
+		err = b.Put(append([]byte(data.TreeID.String()), data.CoinID...), data.TxID)
 		return err
 	})
 	return
@@ -263,8 +271,9 @@ func (s *Service) startPropagation(propagate messaging.PropagationFunc, ro *onet
 	return nil
 }
 
-// GenerateSubTrees returns a list of nested trees, starting with the smallest one of height 1. The number of subtrees
-// returned needs to be specified, as well as the branching factor. The first n-1 subtrees are all perfect trees while
+// GenerateSubTrees returns a list of nested trees and their IDs, starting with the smallest one of height 1.
+// The number of subtrees returned needs to be specified, as well as the branching factor.
+// The first n-1 subtrees are all perfect trees while
 // the last one is the full tree which uses every server of the specified rosters.
 // Each tree is a subtree of every following tree in the list.
 func GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
@@ -279,6 +288,7 @@ func GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
 		return nil, errors.New("SubTreeCount too high/ Roster too small")
 	}
 	var trees []*onet.Tree
+	var ids []onet.TreeID
 
 	// We use the same formula again to specify the number of nodes for GenerateBigNaryTree. We iterate on the height.
 	for i := 1; i <= args.SubTreeCount; i++ {
@@ -286,12 +296,15 @@ func GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
 		newRoster := onet.NewRoster(args.Roster.List[:n])
 		tree := newRoster.GenerateBigNaryTree(args.BF, n)
 		trees = append(trees, tree)
+		ids = append(ids, tree.ID)
 	}
 
 	fullTree := args.Roster.GenerateBigNaryTree(args.BF, len(args.Roster.List))
 	trees = append(trees, fullTree)
+	ids = append(ids, fullTree.ID)
 	reply := &SubTreeReply{
 		Trees:  trees,
+		IDs:    ids,
 		Roster: args.Roster,
 	}
 	return reply, nil
@@ -304,13 +317,15 @@ func newService(c *onet.Context) (onet.Service, error) {
 	s := &Service{
 		ServiceProcessor: onet.NewServiceProcessor(c),
 	}
-	c.ProtocolRegister(protoName, s.NewDefaultProtocol)
+	_, err := c.ProtocolRegister(protoName, s.NewDefaultProtocol)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.RegisterHandler(s.SimpleBLSCoSi); err != nil {
 		log.LLvl2(err)
 		return nil, errors.New("Couldn't register message")
 	}
 
-	var err error
 	s.propagateF, err = messaging.NewPropagationFunc(c, "Propagate", s.propagateHandler, -1)
 	if err != nil {
 		return nil, err

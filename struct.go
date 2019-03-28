@@ -45,6 +45,7 @@ type PropagateData struct {
 	TxID           []byte
 	Tx             transaction.Tx
 	Signature      []byte
+	TreeID         onet.TreeID
 	CoinID         []byte
 }
 
@@ -68,9 +69,10 @@ type SubTreeArgs struct {
 	SubTreeCount int
 }
 
-// SubTreeReply contains the list of subtrees and the complete roster
+// SubTreeReply contains the list of subtrees, their IDs and the complete roster
 type SubTreeReply struct {
 	Trees  []*onet.Tree
+	IDs    []onet.TreeID
 	Roster *onet.Roster
 }
 
@@ -78,6 +80,7 @@ type SubTreeReply struct {
 type GenesisArgs struct {
 	ID         []byte
 	CoinID     []byte
+	TreeIDs    []onet.TreeID
 	ReceiverPK kyber.Point
 }
 

@@ -15,7 +15,7 @@ const protoName = "testProtocol"
 var testSuite = pairing.NewSuiteBn256()
 
 func testProtocol(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error) {
-	vf := func(a []byte) error { return nil }
+	vf := func(a []byte, id onet.TreeID) error { return nil }
 	return NewProtocol(n, vf, testSuite)
 }
 
