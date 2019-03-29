@@ -174,9 +174,8 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	sha.Write(args.Message)
 	h := sha.Sum(nil)
 	data := PropagateData{
-		Initialization: true,
-		TxID:           h,
-		Tx:             tx,
+		TxID: h,
+		Tx:   tx,
 	}
 
 	s.startPropagation(s.propagateF, args.Roster, &data)
@@ -193,11 +192,10 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 			pi.Start()
 			// Send signatures one by one after the initialization
 			data := &PropagateData{
-				Initialization: false,
-				TxID:           h,
-				Signature:      <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
-				TreeID:         tree.ID,
-				CoinID:         tx.Inner.CoinID,
+				TxID:      h,
+				Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
+				TreeID:    tree.ID,
+				CoinID:    tx.Inner.CoinID,
 			}
 			// Only propagate to that specific tree's roster
 			s.startPropagation(s.propagateF, tree.Roster, data)
@@ -215,10 +213,11 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 // bucket, and tracks the last transaction for each coin in the "LastTx" bucket.
 func (s *Service) propagateHandler(msg network.Message) {
 	data := msg.(*PropagateData)
-	// Initialization : the Tx is received but no aggregate signature yet, so we only store Tx.
-	if data.Initialization {
-		s.db.Update(func(bboltTx *bbolt.Tx) error {
-			b := bboltTx.Bucket(s.bucketNameTx)
+	s.db.Update(func(bboltTx *bbolt.Tx) error {
+		b := bboltTx.Bucket(s.bucketNameTx)
+		v := b.Get(data.TxID)
+		// Initialization : we only store Tx and no signature
+		if v == nil {
 			txStorage, err := protobuf.Encode(&TxStorage{
 				Tx: data.Tx,
 			})
@@ -227,14 +226,9 @@ func (s *Service) propagateHandler(msg network.Message) {
 			}
 			err = b.Put(data.TxID, txStorage)
 			return err
-		})
-		return
-	}
+		}
 
-	// Non-initialization : we received a new aggregate structure that we need to store.
-	s.db.Update(func(bboltTx *bbolt.Tx) error {
-		b := bboltTx.Bucket(s.bucketNameTx)
-		v := b.Get(data.TxID)
+		// Non-initialization : we received a new aggregate structure that we need to store.
 		storage := &TxStorage{}
 		err := protobuf.Decode(v, storage)
 		if err != nil {
@@ -255,6 +249,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 		return err
 	})
 	return
+
 }
 
 func (s *Service) startPropagation(propagate messaging.PropagationFunc, ro *onet.Roster, msg network.Message) error {

@@ -38,10 +38,8 @@ type CoSiReply struct {
 	Message   []byte
 }
 
-// PropagateData is what is received by propagateHandler. It's first received with argument initialization "true"
-// and the Tx. Then, it will be received once for each new Signature. It's propagated by TreesBLSCoSi.
+// PropagateData is what is received by propagateHandler. It's propagated by TreesBLSCoSi.
 type PropagateData struct {
-	Initialization bool
 	TxID           []byte
 	Tx             transaction.Tx
 	Signature      []byte
