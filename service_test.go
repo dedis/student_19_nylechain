@@ -100,12 +100,39 @@ func TestTreesBLSCoSi(t *testing.T) {
 	for i := 0; i < 9; i++ {
 		services[i].(*Service).db.View(func(bboltTx *bbolt.Tx) error {
 			b := bboltTx.Bucket(services[i].(*Service).bucketNameLastTx)
-			v := b.Get(coinID)
+			v := b.Get(append([]byte(subTreeReply.Trees[2].ID.String()), coinID...))
 			b = bboltTx.Bucket(services[i].(*Service).bucketNameTx)
 			v = b.Get(v)
 			txStorage := TxStorage{}
 			protobuf.Decode(v, &txStorage)
-			asdfasd
+			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PK0))
+
+			return nil
+		})
+	}
+
+	for i := 0; i < 7; i++ {
+		services[i].(*Service).db.View(func(bboltTx *bbolt.Tx) error {
+			b := bboltTx.Bucket(services[i].(*Service).bucketNameLastTx)
+			v := b.Get(append([]byte(subTreeReply.Trees[1].ID.String()), coinID...))
+			b = bboltTx.Bucket(services[i].(*Service).bucketNameTx)
+			v = b.Get(v)
+			txStorage := TxStorage{}
+			protobuf.Decode(v, &txStorage)
+			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PK0))
+
+			return nil
+		})
+	}
+
+	for i := 0; i < 3; i++ {
+		services[i].(*Service).db.View(func(bboltTx *bbolt.Tx) error {
+			b := bboltTx.Bucket(services[i].(*Service).bucketNameLastTx)
+			v := b.Get(append([]byte(subTreeReply.Trees[0].ID.String()), coinID...))
+			b = bboltTx.Bucket(services[i].(*Service).bucketNameTx)
+			v = b.Get(v)
+			txStorage := TxStorage{}
+			protobuf.Decode(v, &txStorage)
 			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PK0))
 
 			return nil
