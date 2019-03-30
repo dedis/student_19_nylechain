@@ -13,7 +13,6 @@ import (
 
 func init() {
 	network.RegisterMessages(
-		CoSi{}, CoSiReply{},
 		SubTreeArgs{}, SubTreeReply{},
 		CoSiTrees{}, CoSiReplyTrees{},
 		TxStorage{}, PropagateData{},
@@ -26,25 +25,13 @@ const (
 	ErrorParse = iota + 4000
 )
 
-// CoSi will run the cosi protocol on the roster
-type CoSi struct {
-	Roster  *onet.Roster
-	Message []byte
-}
-
-// CoSiReply returns the signature and the original message
-type CoSiReply struct {
-	Signature []byte
-	Message   []byte
-}
-
 // PropagateData is what is received by propagateHandler. It's propagated by TreesBLSCoSi.
 type PropagateData struct {
-	TxID           []byte
-	Tx             transaction.Tx
-	Signature      []byte
-	TreeID         onet.TreeID
-	CoinID         []byte
+	TxID      []byte
+	Tx        transaction.Tx
+	Signature []byte
+	TreeID    onet.TreeID
+	CoinID    []byte
 }
 
 // CoSiTrees contains multiple trees and the complete roster.

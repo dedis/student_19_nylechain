@@ -60,6 +60,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 	defer local.CloseAll()
 	services := local.GetServices(hosts, SimpleBLSCoSiID)
 
+	// We will run TreesBLSCoSi on 3 trees of sizes 3, 7 and 9.
 	subTreeReply, _ := GenerateSubTrees(&SubTreeArgs{
 		Roster:       roster,
 		BF:           2,
@@ -97,10 +98,13 @@ func TestTreesBLSCoSi(t *testing.T) {
 		Roster:  roster,
 		Message: txEncoded,
 	})
+
+	// We do a loop for each treeID. We first get the latest Tx in the second bucket by usinge the right TreeID and coinID,
+	// then use that value to get the TxStorage in the first one. We then check that the stored senderPK is the right one.
 	for i := 0; i < 9; i++ {
 		services[i].(*Service).db.View(func(bboltTx *bbolt.Tx) error {
 			b := bboltTx.Bucket(services[i].(*Service).bucketNameLastTx)
-			v := b.Get(append([]byte(subTreeReply.Trees[2].ID.String()), coinID...))
+			v := b.Get(append([]byte(subTreeReply.IDs[2].String()), coinID...))
 			b = bboltTx.Bucket(services[i].(*Service).bucketNameTx)
 			v = b.Get(v)
 			txStorage := TxStorage{}
@@ -114,7 +118,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 	for i := 0; i < 7; i++ {
 		services[i].(*Service).db.View(func(bboltTx *bbolt.Tx) error {
 			b := bboltTx.Bucket(services[i].(*Service).bucketNameLastTx)
-			v := b.Get(append([]byte(subTreeReply.Trees[1].ID.String()), coinID...))
+			v := b.Get(append([]byte(subTreeReply.IDs[1].String()), coinID...))
 			b = bboltTx.Bucket(services[i].(*Service).bucketNameTx)
 			v = b.Get(v)
 			txStorage := TxStorage{}
@@ -128,7 +132,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		services[i].(*Service).db.View(func(bboltTx *bbolt.Tx) error {
 			b := bboltTx.Bucket(services[i].(*Service).bucketNameLastTx)
-			v := b.Get(append([]byte(subTreeReply.Trees[0].ID.String()), coinID...))
+			v := b.Get(append([]byte(subTreeReply.IDs[0].String()), coinID...))
 			b = bboltTx.Bucket(services[i].(*Service).bucketNameTx)
 			v = b.Get(v)
 			txStorage := TxStorage{}

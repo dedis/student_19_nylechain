@@ -57,77 +57,59 @@ type Service struct {
 	propagateF messaging.PropagationFunc
 }
 
-// SimpleBLSCoSi starts a simpleblscosi-protocol and returns the final signature on the specified roster.
-// The client chooses the message to be signed. It creates a binary tree then runs the protocol on it.
-func (s *Service) SimpleBLSCoSi(cosi *CoSi) (*CoSiReply, error) {
-	tree := cosi.Roster.GenerateNaryTreeWithRoot(2, s.ServerIdentity())
-	if tree == nil {
-		return nil, errors.New("couldn't create tree")
-	}
-	pi, err := s.CreateProtocol(protoName, tree)
+// vf checks transactions.
+func (s *Service) vf(msg []byte, id onet.TreeID) error {
+	tx := transaction.Tx{}
+	err := protobuf.Decode(msg, &tx)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	pi.(*simpleblscosi.SimpleBLSCoSi).Message = cosi.Message
-	pi.Start()
-	reply := &CoSiReply{
-		Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
-		Message:   cosi.Message,
+
+	// Verify that the signature was indeed produced by the sender
+	inner, _ := protobuf.Encode(&tx.Inner)
+
+	suite := pairing.NewSuiteBn256()
+	err = bls.Verify(suite, tx.Inner.SenderPK, inner, tx.Signature)
+	if err != nil {
+		return err
 	}
-	// s.startPropagation(s.propagateF, cosi.Roster, reply)
-	return reply, nil
+
+	// Verify that the previous transaction is the last one of the chain
+	err = s.db.View(func(bboltTx *bbolt.Tx) error {
+		b := bboltTx.Bucket(s.bucketNameLastTx)
+		v := b.Get(append([]byte(id.String()), tx.Inner.CoinID...))
+		if bytes.Compare(v, tx.Inner.PreviousTx) != 0 {
+			return errors.New("The previous transaction is not the last of the chain")
+		}
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	// Verify that the last transaction's receiver is the current transaction's sender
+	err = s.db.View(func(bboltTx *bbolt.Tx) error {
+		b := bboltTx.Bucket(s.bucketNameTx)
+		v := b.Get(tx.Inner.PreviousTx)
+		prevTx := transaction.Tx{}
+		err = protobuf.Decode(v, &prevTx)
+		if err != nil {
+			return err
+		}
+		if !prevTx.Inner.ReceiverPK.Equal(tx.Inner.SenderPK) {
+			return errors.New("Previous transaction's receiver isn't current sender")
+		}
+		return nil
+	})
+
+	return err
 }
 
 // NewDefaultProtocol is the default protocol function, with a verification function that checks transactions.
 func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error) {
 	suite := pairing.NewSuiteBn256()
-	// msg received is an encoded Tx struct
-	vf := func(msg []byte, id onet.TreeID) error {
-		tx := transaction.Tx{}
-		err := protobuf.Decode(msg, &tx)
-		if err != nil {
-			return err
-		}
-
-		// Verify that the signature was indeed produced by the sender
-		inner, _ := protobuf.Encode(&tx.Inner)
-		err = bls.Verify(suite, tx.Inner.SenderPK, inner, tx.Signature)
-		if err != nil {
-			return err
-		}
-
-		// Verify that the previous transaction is the last one of the chain
-		err = s.db.View(func(bboltTx *bbolt.Tx) error {
-			b := bboltTx.Bucket(s.bucketNameLastTx)
-			v := b.Get(append([]byte(id.String()), tx.Inner.CoinID...))
-			if bytes.Compare(v, tx.Inner.PreviousTx) != 0 {
-				return errors.New("The previous transaction is not the last of the chain")
-			}
-			return nil
-		})
-
-		if err != nil {
-			return err
-		}
-
-		// Verify that the last transaction's receiver is the current transaction's sender
-		err = s.db.View(func(bboltTx *bbolt.Tx) error {
-			b := bboltTx.Bucket(s.bucketNameTx)
-			v := b.Get(tx.Inner.PreviousTx)
-			prevTx := transaction.Tx{}
-			err = protobuf.Decode(v, &prevTx)
-			if err != nil {
-				return err
-			}
-			if !prevTx.Inner.ReceiverPK.Equal(tx.Inner.SenderPK) {
-				return errors.New("Previous transaction's receiver isn't current sender")
-			}
-			return nil
-		})
-
-		return err
-	}
-	return simpleblscosi.NewProtocol(n, vf, suite)
+	return simpleblscosi.NewProtocol(n, s.vf, suite)
 }
 
 // GenesisTx creates and stores a genesis Tx with the specified ID (its key in the main bucket), CoinID and receiverPK.
@@ -192,6 +174,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 			pi.Start()
 			// Send signatures one by one after the initialization
 			data := &PropagateData{
+				Tx:        tx,
 				TxID:      h,
 				Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
 				TreeID:    tree.ID,
@@ -213,6 +196,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 // bucket, and tracks the last transaction for each coin in the "LastTx" bucket.
 func (s *Service) propagateHandler(msg network.Message) {
 	data := msg.(*PropagateData)
+
 	s.db.Update(func(bboltTx *bbolt.Tx) error {
 		b := bboltTx.Bucket(s.bucketNameTx)
 		v := b.Get(data.TxID)
@@ -229,8 +213,17 @@ func (s *Service) propagateHandler(msg network.Message) {
 		}
 
 		// Non-initialization : we received a new aggregate structure that we need to store.
+		txEncoded, err := protobuf.Encode(&data.Tx)
+		if err != nil {
+			return err
+		}
+		err = s.vf(txEncoded, data.TreeID)
+		if err != nil {
+			return err
+		}
+
 		storage := &TxStorage{}
-		err := protobuf.Decode(v, storage)
+		err = protobuf.Decode(v, storage)
 		if err != nil {
 			return err
 		}
@@ -315,10 +308,6 @@ func newService(c *onet.Context) (onet.Service, error) {
 	_, err := c.ProtocolRegister(protoName, s.NewDefaultProtocol)
 	if err != nil {
 		return nil, err
-	}
-	if err := s.RegisterHandler(s.SimpleBLSCoSi); err != nil {
-		log.LLvl2(err)
-		return nil, errors.New("Couldn't register message")
 	}
 
 	s.propagateF, err = messaging.NewPropagationFunc(c, "Propagate", s.propagateHandler, -1)
