@@ -153,6 +153,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	}
 	// We send the initialization on the entire roster before sending signatures
 	data := PropagateData{Tx: tx}
+
 	s.startPropagation(s.propagateF, args.Roster, &data)
 
 	var wg sync.WaitGroup
@@ -169,7 +170,8 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 			data := &PropagateData{
 				Tx:        tx,
 				Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
-				Tree:      tree,
+				// Tree:      tree,
+				TreeID:    tree.ID,
 			}
 			// Only propagate to that specific tree's roster
 			s.startPropagation(s.propagateF, tree.Roster, data)
@@ -207,21 +209,23 @@ func (s *Service) propagateHandler(msg network.Message) {
 			err = b.Put(h, txStorage)
 			return err
 		}
-		// Non-initialization : we received a new aggregate signature.
+		// Non-initialization : we received a new aggregate structure that we need to store.
 
-		// Check that Tx is valid with the vf
-		err = s.vf(txEncoded, data.Tree.ID)
+		// First check that Tx is valid with the vf
+		err = s.vf(txEncoded, data.TreeID)
 		if err != nil {
 			return err
 		}
 
-		// Check that the aggregate signature is valid
-		suite := pairing.NewSuiteBn256()
-		pk := bls.AggregatePublicKeys(suite, data.Tree.Root.AggregatePublic(suite))
-		err = bls.Verify(suite, pk, txEncoded, data.Signature)
-		if err != nil {
-			return err
-		}
+		// Then check the aggregate signature
+
+		/*
+			suite := pairing.NewSuiteBn256()
+			err = bls.Verify(suite, data.Tree.Root.AggregatePublic(suite), txEncoded, data.Signature)
+			if err != nil {
+				return err
+			}
+		*/
 
 		// Store the aggregate signature
 		storage := &TxStorage{}
@@ -240,7 +244,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 		}
 		// Update LastTx bucket too
 		b = bboltTx.Bucket(s.bucketNameLastTx)
-		err = b.Put(append([]byte(data.Tree.ID.String()), data.Tx.Inner.CoinID...), h)
+		err = b.Put(append([]byte(data.TreeID.String()), data.Tx.Inner.CoinID...), h)
 		return err
 	})
 	return

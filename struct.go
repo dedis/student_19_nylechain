@@ -29,7 +29,8 @@ const (
 type PropagateData struct {
 	Tx        transaction.Tx
 	Signature []byte
-	Tree    *onet.Tree
+	Tree      *onet.Tree
+	TreeID    onet.TreeID
 }
 
 // CoSiTrees contains multiple trees and the complete roster.
