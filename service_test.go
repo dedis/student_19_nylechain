@@ -3,10 +3,10 @@ package nylechain
 import (
 	"testing"
 
+	"github.com/dedis/student_19_nylechain/transaction"
+	"go.dedis.ch/kyber/v3/util/random"
 	"go.dedis.ch/protobuf"
 	"go.etcd.io/bbolt"
-
-	"github.com/dedis/student_19_nylechain/transaction"
 
 	"go.dedis.ch/kyber/v3/sign/bls"
 
@@ -65,8 +65,8 @@ func TestTreesBLSCoSi(t *testing.T) {
 		BF:           2,
 		SubTreeCount: 2,
 	})
-	PK0 := hosts[0].ServerIdentity.Public
-	PK1 := hosts[1].ServerIdentity.Public
+	PrivK0, PubK0 := bls.NewKeyPair(testSuite, random.New())
+	_, PubK1 := bls.NewKeyPair(testSuite, random.New())
 	iD := []byte("Genesis0")
 	coinID := []byte("0")
 
@@ -75,17 +75,17 @@ func TestTreesBLSCoSi(t *testing.T) {
 			ID:         iD,
 			CoinID:     coinID,
 			TreeIDs:    subTreeReply.IDs,
-			ReceiverPK: PK0,
+			ReceiverPK: PubK0,
 		})
 	}
 	inner := transaction.InnerTx{
 		CoinID:     coinID,
 		PreviousTx: iD,
-		SenderPK:   PK0,
-		ReceiverPK: PK1,
+		SenderPK:   PubK0,
+		ReceiverPK: PubK1,
 	}
 	innerEncoded, _ := protobuf.Encode(&inner)
-	signature, _ := bls.Sign(testSuite, hosts[0].ServerIdentity.GetPrivate(), innerEncoded)
+	signature, _ := bls.Sign(testSuite, PrivK0, innerEncoded)
 	tx := transaction.Tx{
 		Inner:     inner,
 		Signature: signature,
@@ -105,7 +105,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 			v = b.Get(v)
 			txStorage := TxStorage{}
 			protobuf.Decode(v, &txStorage)
-			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PK0))
+			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK0))
 
 			return nil
 		})
@@ -119,7 +119,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 			v = b.Get(v)
 			txStorage := TxStorage{}
 			protobuf.Decode(v, &txStorage)
-			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PK0))
+			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK0))
 
 			return nil
 		})
@@ -133,8 +133,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 			v = b.Get(v)
 			txStorage := TxStorage{}
 			protobuf.Decode(v, &txStorage)
-			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PK0))
-
+			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK0))
 			return nil
 		})
 	}
