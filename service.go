@@ -152,12 +152,8 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 		return nil, err
 	}
 	// We send the initialization on the entire roster before sending signatures
-	sha := sha256.New()
-	sha.Write(args.Message)
-	h := sha.Sum(nil)
 	data := PropagateData{
-		TxID: h,
-		Tx:   tx,
+		Tx: tx,
 	}
 
 	s.startPropagation(s.propagateF, args.Roster, &data)
@@ -175,10 +171,8 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 			// Send signatures one by one after the initialization
 			data := &PropagateData{
 				Tx:        tx,
-				TxID:      h,
 				Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
 				TreeID:    tree.ID,
-				CoinID:    tx.Inner.CoinID,
 			}
 			// Only propagate to that specific tree's roster
 			s.startPropagation(s.propagateF, tree.Roster, data)
@@ -196,11 +190,16 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 // bucket, and tracks the last transaction for each coin in the "LastTx" bucket.
 func (s *Service) propagateHandler(msg network.Message) {
 	data := msg.(*PropagateData)
+	txEncoded, err := protobuf.Encode(&data.Tx)
+	sha := sha256.New()
+	sha.Write(txEncoded)
+	h := sha.Sum(nil)
 
 	s.db.Update(func(bboltTx *bbolt.Tx) error {
 		b := bboltTx.Bucket(s.bucketNameTx)
-		v := b.Get(data.TxID)
+		v := b.Get(h)
 		// Initialization : we only store Tx and no signature
+		// We don't store it as "LastTx" yet : we wait for an aggregate signature.
 		if v == nil {
 			txStorage, err := protobuf.Encode(&TxStorage{
 				Tx: data.Tx,
@@ -208,20 +207,18 @@ func (s *Service) propagateHandler(msg network.Message) {
 			if err != nil {
 				return err
 			}
-			err = b.Put(data.TxID, txStorage)
+			err = b.Put(h, txStorage)
 			return err
 		}
-
 		// Non-initialization : we received a new aggregate structure that we need to store.
-		txEncoded, err := protobuf.Encode(&data.Tx)
-		if err != nil {
-			return err
-		}
+
+		// First check that Tx is valid with the vf
 		err = s.vf(txEncoded, data.TreeID)
 		if err != nil {
 			return err
 		}
 
+		// Store the aggregate signature
 		storage := &TxStorage{}
 		err = protobuf.Decode(v, storage)
 		if err != nil {
@@ -232,13 +229,13 @@ func (s *Service) propagateHandler(msg network.Message) {
 		if err != nil {
 			return err
 		}
-		err = b.Put(data.TxID, storageEncoded)
+		err = b.Put(h, storageEncoded)
 		if err != nil {
 			return err
 		}
 		// Update LastTx bucket too
 		b = bboltTx.Bucket(s.bucketNameLastTx)
-		err = b.Put(append([]byte(data.TreeID.String()), data.CoinID...), data.TxID)
+		err = b.Put(append([]byte(data.TreeID.String()), data.Tx.Inner.CoinID...), h)
 		return err
 	})
 	return

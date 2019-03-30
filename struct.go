@@ -27,11 +27,9 @@ const (
 
 // PropagateData is what is received by propagateHandler. It's propagated by TreesBLSCoSi.
 type PropagateData struct {
-	TxID      []byte
 	Tx        transaction.Tx
 	Signature []byte
 	TreeID    onet.TreeID
-	CoinID    []byte
 }
 
 // CoSiTrees contains multiple trees and the complete roster.
