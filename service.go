@@ -152,10 +152,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 		return nil, err
 	}
 	// We send the initialization on the entire roster before sending signatures
-	data := PropagateData{
-		Tx: tx,
-	}
-
+	data := PropagateData{Tx: tx}
 	s.startPropagation(s.propagateF, args.Roster, &data)
 
 	var wg sync.WaitGroup
@@ -172,7 +169,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 			data := &PropagateData{
 				Tx:        tx,
 				Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
-				TreeID:    tree.ID,
+				Tree:      tree,
 			}
 			// Only propagate to that specific tree's roster
 			s.startPropagation(s.propagateF, tree.Roster, data)
@@ -187,7 +184,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 }
 
 // propagateHandler receives a *PropagateData. It stores the transaction and its aggregate signatures in the "Tx"
-// bucket, and tracks the last transaction for each coin in the "LastTx" bucket.
+// bucket, and tracks the last transaction for each coin and tree in the "LastTx" bucket.
 func (s *Service) propagateHandler(msg network.Message) {
 	data := msg.(*PropagateData)
 	txEncoded, err := protobuf.Encode(&data.Tx)
@@ -210,10 +207,18 @@ func (s *Service) propagateHandler(msg network.Message) {
 			err = b.Put(h, txStorage)
 			return err
 		}
-		// Non-initialization : we received a new aggregate structure that we need to store.
+		// Non-initialization : we received a new aggregate signature.
 
-		// First check that Tx is valid with the vf
-		err = s.vf(txEncoded, data.TreeID)
+		// Check that Tx is valid with the vf
+		err = s.vf(txEncoded, data.Tree.ID)
+		if err != nil {
+			return err
+		}
+
+		// Check that the aggregate signature is valid
+		suite := pairing.NewSuiteBn256()
+		pk := bls.AggregatePublicKeys(suite, data.Tree.Root.AggregatePublic(suite))
+		err = bls.Verify(suite, pk, txEncoded, data.Signature)
 		if err != nil {
 			return err
 		}
@@ -235,7 +240,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 		}
 		// Update LastTx bucket too
 		b = bboltTx.Bucket(s.bucketNameLastTx)
-		err = b.Put(append([]byte(data.TreeID.String()), data.Tx.Inner.CoinID...), h)
+		err = b.Put(append([]byte(data.Tree.ID.String()), data.Tx.Inner.CoinID...), h)
 		return err
 	})
 	return
