@@ -46,6 +46,9 @@ type Service struct {
 	// are correctly handled.
 	*onet.ServiceProcessor
 
+	// Stores each tree which is going to be used by this service, keyed to its ID.
+	trees map[onet.TreeID]*onet.Tree
+
 	db *bbolt.DB
 
 	// Stores each transaction and its aggregate signatures (struct TxStorage), keyed to a hash of the encoded Tx.
@@ -112,6 +115,15 @@ func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolIns
 	return simpleblscosi.NewProtocol(n, s.vf, suite)
 }
 
+// StoreTrees stores the input trees in the map s.trees
+func (s *Service) StoreTrees(trees []*onet.Tree) error {
+	s.trees = make(map[onet.TreeID]*onet.Tree)
+	for _, tree := range trees {
+		s.trees[tree.ID] = tree
+	}
+	return nil
+}
+
 // GenesisTx creates and stores a genesis Tx with the specified ID (its key in the main bucket), CoinID and receiverPK.
 // This will be the previousTx of the first real Tx, which needs it to pass the verification function.
 // It also takes the IDs of the trees where the first Tx will be run, so that the genesis Tx can be stored
@@ -170,7 +182,6 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 			data := &PropagateData{
 				Tx:        tx,
 				Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
-				// Tree:      tree,
 				TreeID:    tree.ID,
 			}
 			// Only propagate to that specific tree's roster
@@ -219,13 +230,11 @@ func (s *Service) propagateHandler(msg network.Message) {
 
 		// Then check the aggregate signature
 
-		/*
-			suite := pairing.NewSuiteBn256()
-			err = bls.Verify(suite, data.Tree.Root.AggregatePublic(suite), txEncoded, data.Signature)
-			if err != nil {
-				return err
-			}
-		*/
+		suite := pairing.NewSuiteBn256()
+		err = bls.Verify(suite, s.trees[data.TreeID].Root.AggregatePublic(suite), txEncoded, data.Signature)
+		if err != nil {
+			return err
+		}
 
 		// Store the aggregate signature
 		storage := &TxStorage{}

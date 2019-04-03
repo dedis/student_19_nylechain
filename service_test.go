@@ -78,6 +78,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 			TreeIDs:    subTreeReply.IDs,
 			ReceiverPK: PubK0,
 		})
+		s.(*Service).StoreTrees(subTreeReply.Trees)
 	}
 	inner := transaction.InnerTx{
 		CoinID:     coinID,

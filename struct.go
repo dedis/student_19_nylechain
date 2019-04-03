@@ -29,7 +29,6 @@ const (
 type PropagateData struct {
 	Tx        transaction.Tx
 	Signature []byte
-	Tree      *onet.Tree
 	TreeID    onet.TreeID
 }
 
