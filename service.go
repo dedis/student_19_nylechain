@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"go.dedis.ch/cothority/v3/messaging"
+	"github.com/dedis/student_19_nylechain/messaging"
 	"go.dedis.ch/protobuf"
 
 	"go.etcd.io/bbolt"
@@ -153,7 +153,7 @@ func (s *Service) GenesisTx(args *GenesisArgs) error {
 	return err
 }
 
-// TreesBLSCoSi is used when multiple trees are already constructed and runs the protocol on them concurrently.
+// TreesBLSCoSi is used when multiple subtrees are already constructed and runs the protocol on them concurrently.
 // The "Message" argument is always an encoded transaction.
 // It propagates the transaction and the aggregate signatures so that they're stored.
 // The signatures returned are ordered like the corresponding trees received.
@@ -166,7 +166,8 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	// We send the initialization on the entire roster before sending signatures
 	data := PropagateData{Tx: tx}
 
-	s.startPropagation(s.propagateF, args.Roster, &data)
+	// Propagate over the last tree which is the biggest one
+	s.startPropagation(s.propagateF, args.Trees[len(args.Trees)-1], &data)
 
 	var wg sync.WaitGroup
 	n := len(args.Trees)
@@ -185,7 +186,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 				TreeID:    tree.ID,
 			}
 			// Only propagate to that specific tree's roster
-			s.startPropagation(s.propagateF, tree.Roster, data)
+			s.startPropagation(s.propagateF, tree, data)
 			signatures[i] = data.Signature
 		}(i, tree)
 	}
@@ -260,15 +261,15 @@ func (s *Service) propagateHandler(msg network.Message) {
 
 }
 
-func (s *Service) startPropagation(propagate messaging.PropagationFunc, ro *onet.Roster, msg network.Message) error {
+func (s *Service) startPropagation(propagate messaging.PropagationFunc, tree *onet.Tree, msg network.Message) error {
 
-	replies, err := propagate(ro, msg, 10*time.Second)
+	replies, err := propagate(tree, msg, 10*time.Second)
 	if err != nil {
 		return err
 	}
 
-	if replies != len(ro.List) {
-		log.Lvl1(s.ServerIdentity(), "Only got", replies, "out of", len(ro.List))
+	if replies != tree.Size() {
+		log.Lvl1(s.ServerIdentity(), "Only got", replies, "out of", tree.Size())
 	}
 
 	return nil
@@ -329,6 +330,7 @@ func newService(c *onet.Context) (onet.Service, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	db, bucketNameTx := s.GetAdditionalBucket([]byte("Tx"))
 	_, bucketNameLastTx := s.GetAdditionalBucket([]byte("LastTx"))
 	s.bucketNameTx = bucketNameTx
