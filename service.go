@@ -182,8 +182,6 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	for i, tree := range args.Trees {
 		go func(i int, tree *onet.Tree) {
 			// Lock for this Tree and CoinID : we don't want concurrent protocols with the same goal
-			s.mutexs[tree.ID.String()+string(tx.Inner.CoinID)].Lock()
-			defer s.mutexs[tree.ID.String()+string(tx.Inner.CoinID)].Unlock()
 			defer wg.Done()
 			pi, _ := s.CreateProtocol(protoName, tree)
 			pi.(*simpleblscosi.SimpleBLSCoSi).Message = args.Message
@@ -210,9 +208,6 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 // bucket, and tracks the last transaction for each coin and tree in the "LastTx" bucket.
 func (s *Service) propagateHandler(msg network.Message) {
 	data := msg.(*PropagateData)
-	// Lock for this coin and tree
-	s.mutexs[data.TreeID.String()+string(data.Tx.Inner.CoinID)].Lock()
-	defer s.mutexs[data.TreeID.String()+string(data.Tx.Inner.CoinID)].Unlock()
 	txEncoded, err := protobuf.Encode(&data.Tx)
 	sha := sha256.New()
 	sha.Write(txEncoded)
@@ -234,6 +229,9 @@ func (s *Service) propagateHandler(msg network.Message) {
 			return err
 		}
 		// Non-initialization : we received a new aggregate structure that we need to store.
+		// Lock for this Tree and Coin unless we're the root (already locked)
+		s.mutexs[data.TreeID.String()+string(data.Tx.Inner.CoinID)].Lock()
+		defer s.mutexs[data.TreeID.String()+string(data.Tx.Inner.CoinID)].Unlock()
 
 		// First check that Tx is valid with the vf
 		err = s.vf(txEncoded, data.TreeID)
