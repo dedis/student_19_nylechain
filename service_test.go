@@ -72,13 +72,13 @@ func TestTreesBLSCoSi(t *testing.T) {
 	coinID := []byte("0")
 
 	for _, s := range services {
+		s.(*Service).StoreTrees(subTreeReply.Trees)
 		s.(*Service).GenesisTx(&GenesisArgs{
 			ID:         iD,
 			CoinID:     coinID,
 			TreeIDs:    subTreeReply.IDs,
 			ReceiverPK: PubK0,
 		})
-		s.(*Service).StoreTrees(subTreeReply.Trees)
 	}
 	inner := transaction.InnerTx{
 		CoinID:     coinID,

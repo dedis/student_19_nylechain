@@ -49,6 +49,9 @@ type Service struct {
 	// Stores each tree which is going to be used by this service, keyed to its ID.
 	trees map[onet.TreeID]*onet.Tree
 
+	// Keys are concatenations of TreeID + CoinID
+	mutexs map[string]*sync.Mutex
+
 	db *bbolt.DB
 
 	// Stores each transaction and its aggregate signatures (struct TxStorage), keyed to a hash of the encoded Tx.
@@ -116,8 +119,8 @@ func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolIns
 }
 
 // StoreTrees stores the input trees in the map s.trees
+// It needs to be called on every service.
 func (s *Service) StoreTrees(trees []*onet.Tree) error {
-	s.trees = make(map[onet.TreeID]*onet.Tree)
 	for _, tree := range trees {
 		s.trees[tree.ID] = tree
 	}
@@ -128,6 +131,7 @@ func (s *Service) StoreTrees(trees []*onet.Tree) error {
 // This will be the previousTx of the first real Tx, which needs it to pass the verification function.
 // It also takes the IDs of the trees where the first Tx will be run, so that the genesis Tx can be stored
 // as last transaction for each of the trees in the second boltdb bucket.
+// It needs to be called on every service.
 func (s *Service) GenesisTx(args *GenesisArgs) error {
 	tx, err := protobuf.Encode(&transaction.Tx{Inner: transaction.InnerTx{ReceiverPK: args.ReceiverPK}})
 	if err != nil {
@@ -143,6 +147,8 @@ func (s *Service) GenesisTx(args *GenesisArgs) error {
 		// Store as last transaction in the LastTx bucket for every TreeID
 		b = bboltTx.Bucket(s.bucketNameLastTx)
 		for _, id := range args.TreeIDs {
+			// Initialize the corresponding mutex
+			s.mutexs[id.String()+string(args.CoinID)] = &sync.Mutex{}
 			err = b.Put(append([]byte(id.String()), args.CoinID...), args.ID)
 			if err != nil {
 				return err
@@ -175,6 +181,9 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	signatures := make([][]byte, n)
 	for i, tree := range args.Trees {
 		go func(i int, tree *onet.Tree) {
+			// Lock for this Tree and CoinID : we don't want concurrent protocols with the same goal
+			s.mutexs[tree.ID.String()+string(tx.Inner.CoinID)].Lock()
+			defer s.mutexs[tree.ID.String()+string(tx.Inner.CoinID)].Unlock()
 			defer wg.Done()
 			pi, _ := s.CreateProtocol(protoName, tree)
 			pi.(*simpleblscosi.SimpleBLSCoSi).Message = args.Message
@@ -185,7 +194,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 				Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
 				TreeID:    tree.ID,
 			}
-			// Only propagate to that specific tree's roster
+			// Only propagate to that specific tree
 			s.startPropagation(s.propagateF, tree, data)
 			signatures[i] = data.Signature
 		}(i, tree)
@@ -230,7 +239,6 @@ func (s *Service) propagateHandler(msg network.Message) {
 		}
 
 		// Then check the aggregate signature
-
 		suite := pairing.NewSuiteBn256()
 		err = bls.Verify(suite, s.trees[data.TreeID].Root.AggregatePublic(suite), txEncoded, data.Signature)
 		if err != nil {
@@ -330,6 +338,8 @@ func newService(c *onet.Context) (onet.Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.trees = make(map[onet.TreeID]*onet.Tree)
+	s.mutexs = make(map[string]*sync.Mutex)
 
 	db, bucketNameTx := s.GetAdditionalBucket([]byte("Tx"))
 	_, bucketNameLastTx := s.GetAdditionalBucket([]byte("LastTx"))
