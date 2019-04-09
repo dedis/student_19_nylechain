@@ -181,7 +181,7 @@ func (s *Service) Test(config *onet.SimulationConfig) {
 
 	//config.Overlay.RegisterTree()
 
-	s.ReadNodeInfo("somefile")
+	s.ReadNodeInfo("example.txt")
 
 	mymap := s.InitializeMaps(config)
 	//mymap := s.InitializeMaps(config, false)
