@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dedis/student_19_nylechain/messaging"
+	"github.com/dedis/student_19_nylechain/propagate"
 	"go.dedis.ch/protobuf"
 
 	"go.etcd.io/bbolt"
@@ -60,7 +60,8 @@ type Service struct {
 	// keyed to a concatenation of TreeID + CoinID
 	bucketNameLastTx []byte
 
-	propagateF messaging.PropagationFunc
+	propagateF propagate.PropagationFunc
+	mypi       func(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error)
 }
 
 // vf checks transactions.
@@ -120,8 +121,15 @@ func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolIns
 
 // NewProtocol is an override. It's called on children automatically
 func (s *Service) NewProtocol(n *onet.TreeNodeInstance, conf *onet.GenericConfig) (onet.ProtocolInstance, error) {
-	suite := pairing.NewSuiteBn256()
-	return simpleblscosi.NewProtocol(n, s.vf, s.mutexs, suite)
+	switch n.ProtocolName() {
+	case protoName:
+		suite := pairing.NewSuiteBn256()
+		return simpleblscosi.NewProtocol(n, s.vf, s.mutexs, suite)
+	case "Propagate":
+		return s.mypi(n)
+	default:
+		return nil, errors.New("This protocol does not exist")
+	}
 }
 
 // StoreTrees stores the input trees in the map s.trees
@@ -155,6 +163,7 @@ func (s *Service) GenesisTx(args *GenesisArgs) error {
 		for _, id := range args.TreeIDs {
 			// Initialize the corresponding mutex
 			s.mutexs[id.String()+string(args.CoinID)] = &sync.Mutex{}
+			// Store as last Tx
 			err = b.Put(append([]byte(id.String()), args.CoinID...), args.ID)
 			if err != nil {
 				return err
@@ -282,7 +291,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 	return
 }
 
-func (s *Service) startPropagation(propagate messaging.PropagationFunc, tree *onet.Tree, msg network.Message) error {
+func (s *Service) startPropagation(propagate propagate.PropagationFunc, tree *onet.Tree, msg network.Message) error {
 	replies, err := propagate(tree, msg, 10*time.Second)
 	if err != nil {
 		return err
@@ -346,7 +355,7 @@ func newService(c *onet.Context) (onet.Service, error) {
 		return nil, err
 	}
 
-	s.propagateF, err = messaging.NewPropagationFunc(c, "Propagate", s.propagateHandler, -1)
+	s.propagateF, s.mypi, err = propagate.NewPropagationFunc(c, "Propagate", s.propagateHandler, -1)
 	if err != nil {
 		return nil, err
 	}
