@@ -115,7 +115,13 @@ func (s *Service) vf(msg []byte, id onet.TreeID) error {
 // NewDefaultProtocol is the default protocol function, with a verification function that checks transactions.
 func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error) {
 	suite := pairing.NewSuiteBn256()
-	return simpleblscosi.NewProtocol(n, s.vf, suite)
+	return simpleblscosi.NewProtocol(n, s.vf, s.mutexs, suite)
+}
+
+// NewProtocol is an override. It's called on children automatically
+func (s *Service) NewProtocol(n *onet.TreeNodeInstance, conf *onet.GenericConfig) (onet.ProtocolInstance, error) {
+	suite := pairing.NewSuiteBn256()
+	return simpleblscosi.NewProtocol(n, s.vf, s.mutexs, suite)
 }
 
 // StoreTrees stores the input trees in the map s.trees
@@ -170,10 +176,14 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 		return nil, err
 	}
 	// We send the initialization on the entire roster before sending signatures
+	fullTree := args.Trees[len(args.Trees)-1]
 	data := PropagateData{Tx: tx}
 
 	// Propagate over the last tree which is the "complete" one
-	s.startPropagation(s.propagateF, args.Trees[len(args.Trees)-1], &data)
+	err = s.startPropagation(s.propagateF, fullTree, &data)
+	if err != nil {
+		return nil, err
+	}
 
 	var wg sync.WaitGroup
 	n := len(args.Trees)
@@ -181,7 +191,6 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	signatures := make([][]byte, n)
 	for i, tree := range args.Trees {
 		go func(i int, tree *onet.Tree) {
-			// Lock for this Tree and CoinID : we don't want concurrent protocols with the same goal
 			defer wg.Done()
 			pi, _ := s.CreateProtocol(protoName, tree)
 			pi.(*simpleblscosi.SimpleBLSCoSi).Message = args.Message
@@ -209,11 +218,14 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 func (s *Service) propagateHandler(msg network.Message) {
 	data := msg.(*PropagateData)
 	txEncoded, err := protobuf.Encode(&data.Tx)
+	if err != nil {
+		log.Error(err)
+	}
 	sha := sha256.New()
 	sha.Write(txEncoded)
 	h := sha.Sum(nil)
 
-	s.db.Update(func(bboltTx *bbolt.Tx) error {
+	err = s.db.Update(func(bboltTx *bbolt.Tx) error {
 		b := bboltTx.Bucket(s.bucketNameTx)
 		v := b.Get(h)
 		// Initialization : we only store Tx and no signature
@@ -223,16 +235,14 @@ func (s *Service) propagateHandler(msg network.Message) {
 				Tx: data.Tx,
 			})
 			if err != nil {
+				s.mutexs[data.TreeID.String()+string(data.Tx.Inner.CoinID)].Unlock()
 				return err
 			}
 			err = b.Put(h, txStorage)
 			return err
 		}
 		// Non-initialization : we received a new aggregate structure that we need to store.
-		// Lock for this Tree and Coin unless we're the root (already locked)
-		s.mutexs[data.TreeID.String()+string(data.Tx.Inner.CoinID)].Lock()
 		defer s.mutexs[data.TreeID.String()+string(data.Tx.Inner.CoinID)].Unlock()
-
 		// First check that Tx is valid with the vf
 		err = s.vf(txEncoded, data.TreeID)
 		if err != nil {
@@ -266,12 +276,13 @@ func (s *Service) propagateHandler(msg network.Message) {
 		err = b.Put(append([]byte(data.TreeID.String()), data.Tx.Inner.CoinID...), h)
 		return err
 	})
+	if err != nil {
+		log.Error(err)
+	}
 	return
-
 }
 
 func (s *Service) startPropagation(propagate messaging.PropagationFunc, tree *onet.Tree, msg network.Message) error {
-
 	replies, err := propagate(tree, msg, 10*time.Second)
 	if err != nil {
 		return err

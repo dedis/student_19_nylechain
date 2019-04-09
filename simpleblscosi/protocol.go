@@ -1,6 +1,11 @@
 package simpleblscosi
 
 import (
+	"sync"
+
+	"github.com/dedis/student_19_nylechain/transaction"
+	"go.dedis.ch/protobuf"
+
 	"go.dedis.ch/kyber/v3/pairing"
 	"go.dedis.ch/kyber/v3/sign/bls"
 	"go.dedis.ch/onet/v3"
@@ -15,6 +20,9 @@ type SimpleBLSCoSi struct {
 	Message []byte
 	// the verification to run during upon receiving the prepare message
 	vf VerificationFn
+
+	// Keys are concatenations of TreeID + CoinID
+	mutexs map[string]*sync.Mutex
 
 	prepare      chan prepareChan
 	prepareReply chan prepareReplyChan
@@ -31,17 +39,19 @@ type VerificationFn func(msg []byte, id onet.TreeID) error
 
 // NewDefaultProtocol is the default protocol function used for registration
 // with an always-true verification.
-func NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error) {
+func NewDefaultProtocol(n *onet.TreeNodeInstance, mutexs map[string]*sync.Mutex) (onet.ProtocolInstance, error) {
 	vf := func(a []byte, id onet.TreeID) error { return nil }
-	return NewProtocol(n, vf, pairing.NewSuiteBn256())
+	return NewProtocol(n, vf, mutexs, pairing.NewSuiteBn256())
 }
 
 // NewProtocol is a callback that is executed when starting the protocol.
-func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, suite *pairing.SuiteBn256) (onet.ProtocolInstance, error) {
+func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, mutexs map[string]*sync.Mutex,
+	suite *pairing.SuiteBn256) (onet.ProtocolInstance, error) {
 	c := &SimpleBLSCoSi{
 		TreeNodeInstance: node,
 		suite:            suite,
 		vf:               vf,
+		mutexs:           mutexs,
 		done:             make(chan bool),
 		FinalSignature:   make(chan []byte, 1),
 	}
@@ -53,7 +63,19 @@ func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, suite *pairing.
 
 // Dispatch will listen on the four channels we use (i.e. four steps)
 func (c *SimpleBLSCoSi) Dispatch() error {
+	var key string
+	// If c is the root it already has the message and we can lock
+	if c.IsRoot() {
+		tx := transaction.Tx{}
+		err := protobuf.Decode(c.Message, &tx)
+		if err != nil {
+			return err
+		}
+		key = c.Tree().ID.String() + string(tx.Inner.CoinID)
+		c.mutexs[key].Lock()
+	}
 	nbrChild := len(c.Children())
+	// If not root, the node will receive the message here and we lock
 	if !c.IsRoot() {
 		log.Lvl3(c.ServerIdentity(), "waiting for prepare")
 		prep := (<-c.prepare).SimplePrepare
@@ -61,6 +83,13 @@ func (c *SimpleBLSCoSi) Dispatch() error {
 		if err != nil {
 			return err
 		}
+		tx := transaction.Tx{}
+		err = protobuf.Decode(c.Message, &tx)
+		if err != nil {
+			return err
+		}
+		key = c.Tree().ID.String() + string(tx.Inner.CoinID)
+		c.mutexs[key].Lock()
 	}
 	if !c.IsLeaf() {
 		var buf []*SimplePrepareReply
@@ -71,6 +100,7 @@ func (c *SimpleBLSCoSi) Dispatch() error {
 		}
 		err := c.handlePrepareReplies(buf)
 		if err != nil {
+			c.mutexs[key].Unlock()
 			return err
 		}
 	}
@@ -79,6 +109,7 @@ func (c *SimpleBLSCoSi) Dispatch() error {
 		commit := (<-c.commit).SimpleCommit
 		err := c.handleCommit(&commit)
 		if err != nil {
+			c.mutexs[key].Unlock()
 			return err
 		}
 	}
@@ -91,6 +122,7 @@ func (c *SimpleBLSCoSi) Dispatch() error {
 		}
 		err := c.handleCommitReplies(buf)
 		if err != nil {
+			c.mutexs[key].Unlock()
 			return err
 		}
 	}
