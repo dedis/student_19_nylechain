@@ -1,4 +1,4 @@
-package messaging
+package propagate
 
 import (
 	"errors"
@@ -76,8 +76,8 @@ type propagationContext interface {
 // The protocol will fail if more than thresh nodes per subtree fail to respond.
 // If thresh == -1, the threshold defaults to len(n.Roster().List-1)/3. Thus, for a roster of
 // 5, t = int(4/3) = 1, e.g. 1 node out of the 5 can fail.
-func NewPropagationFunc(c propagationContext, name string, f PropagationStore, thresh int) (PropagationFunc, error) {
-	pid, err := c.ProtocolRegister(name, func(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error) {
+func NewPropagationFunc(c propagationContext, name string, f PropagationStore, thresh int) (PropagationFunc, func(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error), error) {
+	mypi := func(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error) {
 		// Make a local copy in order to avoid a data race.
 		t := thresh
 		if t == -1 {
@@ -96,7 +96,8 @@ func NewPropagationFunc(c propagationContext, name string, f PropagationStore, t
 			}
 		}
 		return p, nil
-	})
+	}
+	pid, err := c.ProtocolRegister(name, mypi)
 	log.Lvl3("Registering new propagation for", c.ServerIdentity(),
 		name, pid)
 	return func(tree *onet.Tree, msg network.Message, to time.Duration) (int, error) {
@@ -108,7 +109,7 @@ func NewPropagationFunc(c propagationContext, name string, f PropagationStore, t
 			return 0, err
 		}
 		return propagateStartAndWait(pi, msg, to, f)
-	}, err
+	}, mypi, err
 }
 
 // Separate function for testing
