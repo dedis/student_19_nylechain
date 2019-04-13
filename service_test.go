@@ -139,7 +139,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 			v = b.Get(v)
 			txStorage := TxStorage{}
 			protobuf.Decode(v, &txStorage)
-			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK0))
+			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK1))
 
 			return nil
 		})
@@ -153,7 +153,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 			v = b.Get(v)
 			txStorage := TxStorage{}
 			protobuf.Decode(v, &txStorage)
-			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK0))
+			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK1))
 
 			return nil
 		})
@@ -167,7 +167,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 			v = b.Get(v)
 			txStorage := TxStorage{}
 			protobuf.Decode(v, &txStorage)
-			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK0))
+			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK1))
 			return nil
 		})
 	}
