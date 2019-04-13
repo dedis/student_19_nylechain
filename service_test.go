@@ -1,6 +1,7 @@
 package nylechain
 
 import (
+	"crypto/sha256"
 	"testing"
 
 	"github.com/dedis/student_19_nylechain/transaction"
@@ -67,22 +68,25 @@ func TestTreesBLSCoSi(t *testing.T) {
 		SubTreeCount: 2,
 	})
 	PrivK0, PubK0 := bls.NewKeyPair(testSuite, random.New())
-	_, PubK1 := bls.NewKeyPair(testSuite, random.New())
-	iD := []byte("Genesis0")
+	PrivK1, PubK1 := bls.NewKeyPair(testSuite, random.New())
+	_, PubK2 := bls.NewKeyPair(testSuite, random.New())
+	iD0 := []byte("Genesis0")
 	coinID := []byte("0")
 
 	for _, s := range services {
 		s.(*Service).StoreTrees(subTreeReply.Trees)
 		s.(*Service).GenesisTx(&GenesisArgs{
-			ID:         iD,
+			ID:         iD0,
 			CoinID:     coinID,
 			TreeIDs:    subTreeReply.IDs,
 			ReceiverPK: PubK0,
 		})
 	}
+
+	// First transaction
 	inner := transaction.InnerTx{
 		CoinID:     coinID,
-		PreviousTx: iD,
+		PreviousTx: iD0,
 		SenderPK:   PubK0,
 		ReceiverPK: PubK1,
 	}
@@ -93,11 +97,36 @@ func TestTreesBLSCoSi(t *testing.T) {
 		Signature: signature,
 	}
 	txEncoded, _ := protobuf.Encode(&tx)
+	sha := sha256.New()
+	sha.Write(txEncoded)
+	iD1 := sha.Sum(nil)
+
+	// Second transaction
+	inner2 := transaction.InnerTx{
+		CoinID:     coinID,
+		PreviousTx: iD1,
+		SenderPK:   PubK1,
+		ReceiverPK: PubK2,
+	}
+	innerEncoded2, _ := protobuf.Encode(&inner2)
+	signature2, _ := bls.Sign(testSuite, PrivK1, innerEncoded2)
+	tx2 := transaction.Tx{
+		Inner:     inner2,
+		Signature: signature2,
+	}
+	txEncoded2, _ := protobuf.Encode(&tx2)
+
+	// Launch protocols
 
 	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
 		Trees:   subTreeReply.Trees,
 		Roster:  roster,
 		Message: txEncoded,
+	})
+	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
+		Trees:   subTreeReply.Trees,
+		Roster:  roster,
+		Message: txEncoded2,
 	})
 
 	// We do a loop for each treeID. We first get the latest Tx in the second bucket by usinge the right TreeID and coinID,

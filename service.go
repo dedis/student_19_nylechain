@@ -56,6 +56,7 @@ type Service struct {
 
 	// Stores each transaction and its aggregate signatures (struct TxStorage), keyed to a hash of the encoded Tx.
 	bucketNameTx []byte
+
 	// Stores the last Tx, hashed (its key in the first bucket) for each CoinID and Tree,
 	// keyed to a concatenation of TreeID + CoinID
 	bucketNameLastTx []byte
@@ -99,12 +100,12 @@ func (s *Service) vf(msg []byte, id onet.TreeID) error {
 	err = s.db.View(func(bboltTx *bbolt.Tx) error {
 		b := bboltTx.Bucket(s.bucketNameTx)
 		v := b.Get(tx.Inner.PreviousTx)
-		prevTx := transaction.Tx{}
-		err = protobuf.Decode(v, &prevTx)
+		storage := TxStorage{}
+		err = protobuf.Decode(v, &storage)
 		if err != nil {
 			return err
 		}
-		if !prevTx.Inner.ReceiverPK.Equal(tx.Inner.SenderPK) {
+		if !storage.Tx.Inner.ReceiverPK.Equal(tx.Inner.SenderPK) {
 			return errors.New("Previous transaction's receiver isn't current sender")
 		}
 		return nil
@@ -147,14 +148,14 @@ func (s *Service) StoreTrees(trees []*onet.Tree) error {
 // as last transaction for each of the trees in the second boltdb bucket.
 // It needs to be called on every service.
 func (s *Service) GenesisTx(args *GenesisArgs) error {
-	tx, err := protobuf.Encode(&transaction.Tx{Inner: transaction.InnerTx{ReceiverPK: args.ReceiverPK}})
+	storage, err := protobuf.Encode(&TxStorage{Tx: transaction.Tx{Inner: transaction.InnerTx{ReceiverPK: args.ReceiverPK}}})
 	if err != nil {
 		return err
 	}
 	err = s.db.Update(func(bboltTx *bbolt.Tx) error {
 		// Store in the main bucket
 		b := bboltTx.Bucket(s.bucketNameTx)
-		err = b.Put(args.ID, tx)
+		err = b.Put(args.ID, storage)
 		if err != nil {
 			return err
 		}
