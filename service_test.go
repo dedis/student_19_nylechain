@@ -140,14 +140,37 @@ func TestTreesBLSCoSi(t *testing.T) {
 	}
 	txEncoded1, _ := protobuf.Encode(&tx1)
 
+	// Alternative first Tx of coin 0 sending to PubK2 instead of PubK1
+
+	/*innerAlt := transaction.InnerTx{
+		CoinID:     coinID,
+		PreviousTx: iD0,
+		SenderPK:   PubK0,
+		ReceiverPK: PubK2,
+	}
+	innerEncodedAlt, _ := protobuf.Encode(&innerAlt)
+	signatureAlt, _ := bls.Sign(testSuite, PrivK0, innerEncodedAlt)
+	txAlt := transaction.Tx{
+		Inner:     innerAlt,
+		Signature: signatureAlt,
+	}
+	txEncodedAlt, _ := protobuf.Encode(&txAlt)*/
+
 	// Launch protocols
 
-	// First Tx on coin 0
+	// First Tx on coin 0, receiver is PubK1
 	go services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
 		Trees:   subTreeReply.Trees,
 		Roster:  roster,
 		Message: txEncoded,
 	})
+
+	/*// Double spending attempt, this time the receiver is PubK2
+	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
+		Trees:   subTreeReply.Trees,
+		Roster:  roster,
+		Message: txEncodedAlt,
+	})*/
 
 	// Launch a protocol on the same trees in parallel, but for a different coin (1).
 	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
@@ -155,7 +178,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 		Roster:  roster,
 		Message: txEncoded1,
 	})
-	
+
 	// Second transaction of coin 0
 	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
 		Trees:   subTreeReply.Trees,

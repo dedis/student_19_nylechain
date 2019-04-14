@@ -63,11 +63,12 @@ func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, mutexs map[stri
 
 // Dispatch will listen on the four channels we use (i.e. four steps)
 func (c *SimpleBLSCoSi) Dispatch() error {
+	var err error
 	var key string
 	// If c is the root it already has the message and we can lock
 	if c.IsRoot() {
 		tx := transaction.Tx{}
-		err := protobuf.Decode(c.Message, &tx)
+		err = protobuf.Decode(c.Message, &tx)
 		if err != nil {
 			return err
 		}
@@ -79,7 +80,7 @@ func (c *SimpleBLSCoSi) Dispatch() error {
 	if !c.IsRoot() {
 		log.Lvl3(c.ServerIdentity(), "waiting for prepare")
 		prep := (<-c.prepare).SimplePrepare
-		err := c.handlePrepare(&prep)
+		err = c.handlePrepare(&prep)
 		if err != nil {
 			return err
 		}
@@ -98,7 +99,7 @@ func (c *SimpleBLSCoSi) Dispatch() error {
 			log.Lvlf3("%s collecting prepare replies %d/%d", c.ServerIdentity(), i, nbrChild)
 			buf = append(buf, &reply.SimplePrepareReply)
 		}
-		err := c.handlePrepareReplies(buf)
+		err = c.handlePrepareReplies(buf)
 		if err != nil {
 			c.mutexs[key].Unlock()
 			return err
@@ -107,7 +108,7 @@ func (c *SimpleBLSCoSi) Dispatch() error {
 	if !c.IsRoot() {
 		log.Lvl3(c.ServerIdentity(), "waiting for commit")
 		commit := (<-c.commit).SimpleCommit
-		err := c.handleCommit(&commit)
+		err = c.handleCommit(&commit)
 		if err != nil {
 			c.mutexs[key].Unlock()
 			return err
@@ -120,7 +121,7 @@ func (c *SimpleBLSCoSi) Dispatch() error {
 			log.Lvlf3("%s handling commitReply of child %d/%d", c.ServerIdentity(), i, nbrChild)
 			buf = append(buf, &commitReply.SimpleCommitReply)
 		}
-		err := c.handleCommitReplies(buf)
+		err = c.handleCommitReplies(buf)
 		if err != nil {
 			c.mutexs[key].Unlock()
 			return err
