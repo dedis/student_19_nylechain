@@ -88,7 +88,7 @@ func UpdateDistance(all LocalityNodes, startNode *LocalityNode) {
 
 }
 
-//Removes Links from the Graph According to some omtimisation conditions
+//Removes Links from the Graph According to some optimisation conditions
 func RemoveLinks(all LocalityNodes, Root *LocalityNode, max int, OptType int) {
 
 	Bridges := GetBridges(all, Root)

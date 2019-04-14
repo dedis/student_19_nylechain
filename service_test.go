@@ -71,13 +71,21 @@ func TestTreesBLSCoSi(t *testing.T) {
 	PrivK1, PubK1 := bls.NewKeyPair(testSuite, random.New())
 	_, PubK2 := bls.NewKeyPair(testSuite, random.New())
 	iD0 := []byte("Genesis0")
+	iD1 := []byte("Genesis1")
 	coinID := []byte("0")
+	coinID1 := []byte("1")
 
 	for _, s := range services {
 		s.(*Service).StoreTrees(subTreeReply.Trees)
 		s.(*Service).GenesisTx(&GenesisArgs{
 			ID:         iD0,
 			CoinID:     coinID,
+			TreeIDs:    subTreeReply.IDs,
+			ReceiverPK: PubK0,
+		})
+		s.(*Service).GenesisTx(&GenesisArgs{
+			ID:         iD1,
+			CoinID:     coinID1,
 			TreeIDs:    subTreeReply.IDs,
 			ReceiverPK: PubK0,
 		})
@@ -99,34 +107,60 @@ func TestTreesBLSCoSi(t *testing.T) {
 	txEncoded, _ := protobuf.Encode(&tx)
 	sha := sha256.New()
 	sha.Write(txEncoded)
-	iD1 := sha.Sum(nil)
+	iD01 := sha.Sum(nil)
 
 	// Second transaction
-	inner2 := transaction.InnerTx{
+	inner02 := transaction.InnerTx{
 		CoinID:     coinID,
-		PreviousTx: iD1,
+		PreviousTx: iD01,
 		SenderPK:   PubK1,
 		ReceiverPK: PubK2,
 	}
-	innerEncoded2, _ := protobuf.Encode(&inner2)
-	signature2, _ := bls.Sign(testSuite, PrivK1, innerEncoded2)
-	tx2 := transaction.Tx{
-		Inner:     inner2,
-		Signature: signature2,
+	innerEncoded02, _ := protobuf.Encode(&inner02)
+	signature02, _ := bls.Sign(testSuite, PrivK1, innerEncoded02)
+	tx02 := transaction.Tx{
+		Inner:     inner02,
+		Signature: signature02,
 	}
-	txEncoded2, _ := protobuf.Encode(&tx2)
+	txEncoded02, _ := protobuf.Encode(&tx02)
+
+	// First transaction of the second coin
+
+	inner1 := transaction.InnerTx{
+		CoinID:     coinID1,
+		PreviousTx: iD1,
+		SenderPK:   PubK0,
+		ReceiverPK: PubK1,
+	}
+	innerEncoded1, _ := protobuf.Encode(&inner1)
+	signature1, _ := bls.Sign(testSuite, PrivK0, innerEncoded1)
+	tx1 := transaction.Tx{
+		Inner:     inner1,
+		Signature: signature1,
+	}
+	txEncoded1, _ := protobuf.Encode(&tx1)
 
 	// Launch protocols
 
-	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
+	// First Tx on coin 0
+	go services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
 		Trees:   subTreeReply.Trees,
 		Roster:  roster,
 		Message: txEncoded,
 	})
+
+	// Launch a protocol on the same trees in parallel, but for a different coin (1).
 	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
 		Trees:   subTreeReply.Trees,
 		Roster:  roster,
-		Message: txEncoded2,
+		Message: txEncoded1,
+	})
+	
+	// Second transaction of coin 0
+	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
+		Trees:   subTreeReply.Trees,
+		Roster:  roster,
+		Message: txEncoded02,
 	})
 
 	// We do a loop for each treeID. We first get the latest Tx in the second bucket by usinge the right TreeID and coinID,
