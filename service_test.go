@@ -1,6 +1,7 @@
 package nylechain
 
 import (
+	"crypto/sha256"
 	"testing"
 
 	"github.com/dedis/student_19_nylechain/transaction"
@@ -67,22 +68,33 @@ func TestTreesBLSCoSi(t *testing.T) {
 		SubTreeCount: 2,
 	})
 	PrivK0, PubK0 := bls.NewKeyPair(testSuite, random.New())
-	_, PubK1 := bls.NewKeyPair(testSuite, random.New())
-	iD := []byte("Genesis0")
+	PrivK1, PubK1 := bls.NewKeyPair(testSuite, random.New())
+	_, PubK2 := bls.NewKeyPair(testSuite, random.New())
+	iD0 := []byte("Genesis0")
+	iD1 := []byte("Genesis1")
 	coinID := []byte("0")
+	coinID1 := []byte("1")
 
 	for _, s := range services {
 		s.(*Service).StoreTrees(subTreeReply.Trees)
 		s.(*Service).GenesisTx(&GenesisArgs{
-			ID:         iD,
+			ID:         iD0,
 			CoinID:     coinID,
 			TreeIDs:    subTreeReply.IDs,
 			ReceiverPK: PubK0,
 		})
+		s.(*Service).GenesisTx(&GenesisArgs{
+			ID:         iD1,
+			CoinID:     coinID1,
+			TreeIDs:    subTreeReply.IDs,
+			ReceiverPK: PubK0,
+		})
 	}
+
+	// First transaction
 	inner := transaction.InnerTx{
 		CoinID:     coinID,
-		PreviousTx: iD,
+		PreviousTx: iD0,
 		SenderPK:   PubK0,
 		ReceiverPK: PubK1,
 	}
@@ -93,11 +105,85 @@ func TestTreesBLSCoSi(t *testing.T) {
 		Signature: signature,
 	}
 	txEncoded, _ := protobuf.Encode(&tx)
+	sha := sha256.New()
+	sha.Write(txEncoded)
+	iD01 := sha.Sum(nil)
 
-	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
+	// Second transaction
+	inner02 := transaction.InnerTx{
+		CoinID:     coinID,
+		PreviousTx: iD01,
+		SenderPK:   PubK1,
+		ReceiverPK: PubK2,
+	}
+	innerEncoded02, _ := protobuf.Encode(&inner02)
+	signature02, _ := bls.Sign(testSuite, PrivK1, innerEncoded02)
+	tx02 := transaction.Tx{
+		Inner:     inner02,
+		Signature: signature02,
+	}
+	txEncoded02, _ := protobuf.Encode(&tx02)
+
+	// First transaction of the second coin
+
+	inner1 := transaction.InnerTx{
+		CoinID:     coinID1,
+		PreviousTx: iD1,
+		SenderPK:   PubK0,
+		ReceiverPK: PubK1,
+	}
+	innerEncoded1, _ := protobuf.Encode(&inner1)
+	signature1, _ := bls.Sign(testSuite, PrivK0, innerEncoded1)
+	tx1 := transaction.Tx{
+		Inner:     inner1,
+		Signature: signature1,
+	}
+	txEncoded1, _ := protobuf.Encode(&tx1)
+
+	// Alternative first Tx of coin 0 sending to PubK2 instead of PubK1
+
+	/*innerAlt := transaction.InnerTx{
+		CoinID:     coinID,
+		PreviousTx: iD0,
+		SenderPK:   PubK0,
+		ReceiverPK: PubK2,
+	}
+	innerEncodedAlt, _ := protobuf.Encode(&innerAlt)
+	signatureAlt, _ := bls.Sign(testSuite, PrivK0, innerEncodedAlt)
+	txAlt := transaction.Tx{
+		Inner:     innerAlt,
+		Signature: signatureAlt,
+	}
+	txEncodedAlt, _ := protobuf.Encode(&txAlt)*/
+
+	// Launch protocols
+
+	// First Tx on coin 0, receiver is PubK1
+	go services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
 		Trees:   subTreeReply.Trees,
 		Roster:  roster,
 		Message: txEncoded,
+	})
+
+	/*// Double spending attempt, this time the receiver is PubK2
+	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
+		Trees:   subTreeReply.Trees,
+		Roster:  roster,
+		Message: txEncodedAlt,
+	})*/
+
+	// Launch a protocol on the same trees in parallel, but for a different coin (1).
+	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
+		Trees:   subTreeReply.Trees,
+		Roster:  roster,
+		Message: txEncoded1,
+	})
+
+	// Second transaction of coin 0
+	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
+		Trees:   subTreeReply.Trees,
+		Roster:  roster,
+		Message: txEncoded02,
 	})
 
 	// We do a loop for each treeID. We first get the latest Tx in the second bucket by usinge the right TreeID and coinID,
@@ -110,7 +196,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 			v = b.Get(v)
 			txStorage := TxStorage{}
 			protobuf.Decode(v, &txStorage)
-			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK0))
+			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK1))
 
 			return nil
 		})
@@ -124,7 +210,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 			v = b.Get(v)
 			txStorage := TxStorage{}
 			protobuf.Decode(v, &txStorage)
-			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK0))
+			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK1))
 
 			return nil
 		})
@@ -138,7 +224,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 			v = b.Get(v)
 			txStorage := TxStorage{}
 			protobuf.Decode(v, &txStorage)
-			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK0))
+			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK1))
 			return nil
 		})
 	}
