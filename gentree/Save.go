@@ -49,7 +49,7 @@ func UpdateDistance(all LocalityNodes, startNode *LocalityNode) {
 		for _, node := range all.All {
 			if all.ClusterBunchDistances[crtNode][node] < math.MaxFloat64 {
 				//log.LLvl1("looking at link", crtNode.Name, node.Name)
-				if distSoFar+all.ClusterBunchDistances[crtNode][node] < all.ClusterBunchDistances[startNode][node] {
+				if distSoFar + all.ClusterBunchDistances[crtNode][node] < all.ClusterBunchDistances[startNode][node] {
 					all.ClusterBunchDistances[startNode][node] = distSoFar + all.ClusterBunchDistances[crtNode][node]
 					all.ClusterBunchDistances[node][startNode] = all.ClusterBunchDistances[startNode][node]
 					all.Links[startNode][node][crtNode] = true
@@ -94,22 +94,24 @@ func RemoveLinks(all LocalityNodes, Root *LocalityNode, max int, OptType int) {
 	Bridges := GetBridges(all, Root)
 
 	/*
-		_, _, Links := AproximateDistanceOracle(all)
+	_, _, Links := AproximateDistanceOracle(all)
 
-		for _, node_a := range all.All {
-			for _, node_b := range all.All {
-				for w, exists := range Links[node_a][node_b] {
-					if exists {
-						log.LLvl1(node_a.Name, node_b.Name, "through", w.Name)
-					}
+	for _, node_a := range all.All {
+		for _, node_b := range all.All {
+			for w, exists := range Links[node_a][node_b] {
+				if exists {
+					log.LLvl1(node_a.Name, node_b.Name, "through", w.Name)
 				}
 			}
 		}
+	}
 	*/
+
 
 	// Range through all nodes and see what we can remove from their bunch - > but don't remove it!
 
 	//TODO range is order
+
 
 	for _, node_a := range all.All {
 
@@ -129,10 +131,10 @@ func RemoveLinks(all LocalityNodes, Root *LocalityNode, max int, OptType int) {
 		log.LLvl1("nr edges", nredges)
 
 		/*
-			nredgesBunch := MapLen2(node_a.Bunch)
-			if nredges != nredgesBunch {
-				log.Error("bunch size differs!")
-			}
+		nredgesBunch := MapLen2(node_a.Bunch)
+		if nredges != nredgesBunch {
+			log.Error("bunch size differs!")
+		}
 		*/
 
 		// count the number of nodes in the bunch at each level
@@ -163,10 +165,12 @@ func RemoveLinks(all LocalityNodes, Root *LocalityNode, max int, OptType int) {
 
 			log.LLvl1("Cluster Opt")
 
+
 			for nredges > max {
 
 				//log.LLvl1("priority", PriorityLevel)
 				//log.LLvl1(nrPerLevel)
+
 
 				ClusterPriority += 1
 
@@ -178,6 +182,8 @@ func RemoveLinks(all LocalityNodes, Root *LocalityNode, max int, OptType int) {
 						if ClusterNode.Level != ClusterPriority {
 							continue
 						}
+
+
 
 						// try removing that cluster node
 						// it'll affect the bunch of another node -> see if it breaks
@@ -196,24 +202,24 @@ func RemoveLinks(all LocalityNodes, Root *LocalityNode, max int, OptType int) {
 
 						// too restritive!
 						/*
-							for _, linkNodes := range Links[ClusterNode] {
+						for _, linkNodes := range Links[ClusterNode] {
 
-								linksize := 0
-								for _, exists := range linkNodes {
-									if exists {
-										linksize++
-									}
-								}
-
-								if linkNodes[node_a] && linksize == 1 {
-
-									log.LLvl1("cannot remove", node_a.Name, "from bunch of", ClusterNode.Name)
-
-									IsInPDist = true
-
-									break
+							linksize := 0
+							for _, exists := range linkNodes {
+								if exists {
+									linksize++
 								}
 							}
+
+							if linkNodes[node_a] && linksize == 1 {
+
+								log.LLvl1("cannot remove", node_a.Name, "from bunch of", ClusterNode.Name)
+
+								IsInPDist = true
+
+								break
+							}
+						}
 						*/
 
 						//Removes nodes that can not be removed from the map where nodes are organized by levels
@@ -332,6 +338,7 @@ func RemoveLinks(all LocalityNodes, Root *LocalityNode, max int, OptType int) {
 		// update the distance to the cluster and the bunch
 
 		UpdateDistance(all, node_a)
+
 
 	}
 
@@ -624,47 +631,50 @@ func approxDistance(all LocalityNodes, nodeU *LocalityNode, nodeV *LocalityNode)
 	return all.ClusterBunchDistances[w][nodeU] + all.ClusterBunchDistances[w][nodeV]
 }
 
-func AproximateDistanceOracle(all LocalityNodes) map[*LocalityNode]map[*LocalityNode]float64 {
+func AproximateDistanceOracle(all LocalityNodes) (map[*LocalityNode]map[*LocalityNode]float64) {
 
 	//Creates maps for links and distances
 	dist2 := make(map[*LocalityNode]map[*LocalityNode]float64)
 
+
+
 	/*
-		if u.Name == v.Name {
-			return u.Name, 0
-		}
-		w := u
-		i := 0
+			if u.Name == v.Name {
+				return u.Name, 0
+			}
+			w := u
+			i := 0
 
-		for {
-			found := false
-			for _, b1 := range v.bunch {
-				if b1 == w.Name {
-					found = true
+			for {
+				found := false
+				for _, b1 := range v.bunch {
+					if b1 == w.Name {
+						found = true
+						break
+					}
+				}
+				i++
+				if found {
 					break
 				}
-			}
-			i++
-			if found {
-				break
-			}
 
-			if i == K {
-				log.Error("should get here!", u.Name, v.Name, u.bunch, v.bunch)
-			}
-			aux := u
-			u = v
-			v = aux
-			for _,n := range nodes {
-				if n.Name == u.pDist[i] {
-					w = n
-					break
+				if i == K {
+					log.Error("should get here!", u.Name, v.Name, u.bunch, v.bunch)
+				}
+				aux := u
+				u = v
+				v = aux
+				for _,n := range nodes {
+					if n.Name == u.pDist[i] {
+						w = n
+						break
+					}
 				}
 			}
-		}
 
-		return w.Name, euclidianDist(w,u) + euclidianDist(w,v)
-	*/
+			return w.Name, euclidianDist(w,u) + euclidianDist(w,v)
+			 */
+
 
 	for _, aux := range all.All {
 
@@ -690,101 +700,104 @@ func AproximateDistanceOracle(all LocalityNodes) map[*LocalityNode]map[*Locality
 		}
 	}
 
+
+
+
 	/*
-		for i, nodeA := range all.All {
+	for i, nodeA := range all.All {
 
-			for j, nodeB := range all.All {
+		for j, nodeB := range all.All {
 
-				if j > i {
-					break
-				}
+			if j > i {
+				break
+			}
 
-				if dist2[nodeA][nodeB] < math.MaxFloat64 {
+			if dist2[nodeA][nodeB] < math.MaxFloat64 {
+				continue
+			}
+
+			pathLen := 0
+			Path := make([]string, 0)
+
+			MinDist(all, &Path, &pathLen, nodeA, nodeB, &dist2, &Links)
+			log.LLvl1("computing dist between", nodeA.Name, nodeB.Name, dist2[nodeA][nodeB], Path)
+
+			/*
+
+			if nodeA.OptimalBunch[nodeB.Name] {
+				//Sets distances for nodes in nodeA's Bunch
+				dist2[nodeA][nodeB] = dist[nodeA][nodeB]
+
+				dist2[nodeB][nodeA] = dist[nodeA][nodeB]
+				continue
+			}
+			if nodeB.OptimalBunch[nodeA.Name] {
+				//Sets distances for nodes in nodeA's Cluster
+
+				dist2[nodeA][nodeB] = dist[nodeA][nodeB]
+				dist2[nodeB][nodeA] = dist[nodeA][nodeB]
+				continue
+			}
+			//Sets distances to itself to 0
+			if nodeA == nodeB {
+				dist2[nodeA][nodeB] = 0
+				dist2[nodeB][nodeA] = 0
+				continue
+			}
+
+			PossibleLinks := make(map[*LocalityNode]bool)
+
+
+			for k, exists := range nodeA.OptimalBunch {
+				//Looks for links in nodeA's OptimalBunch
+				//
+				if !exists {
 					continue
 				}
 
-				pathLen := 0
-				Path := make([]string, 0)
-
-				MinDist(all, &Path, &pathLen, nodeA, nodeB, &dist2, &Links)
-				log.LLvl1("computing dist between", nodeA.Name, nodeB.Name, dist2[nodeA][nodeB], Path)
-
-				/*
-
-				if nodeA.OptimalBunch[nodeB.Name] {
-					//Sets distances for nodes in nodeA's Bunch
-					dist2[nodeA][nodeB] = dist[nodeA][nodeB]
-
-					dist2[nodeB][nodeA] = dist[nodeA][nodeB]
-					continue
-				}
-				if nodeB.OptimalBunch[nodeA.Name] {
-					//Sets distances for nodes in nodeA's Cluster
-
-					dist2[nodeA][nodeB] = dist[nodeA][nodeB]
-					dist2[nodeB][nodeA] = dist[nodeA][nodeB]
-					continue
-				}
-				//Sets distances to itself to 0
-				if nodeA == nodeB {
-					dist2[nodeA][nodeB] = 0
-					dist2[nodeB][nodeA] = 0
-					continue
-				}
-
-				PossibleLinks := make(map[*LocalityNode]bool)
 
 
-				for k, exists := range nodeA.OptimalBunch {
-					//Looks for links in nodeA's OptimalBunch
-					//
-					if !exists {
-						continue
+
+			//Checks for the existance of the link in nodeB's OptimalBunch and for the distance
+
+
+			if nodeB.OptimalBunch[k] && (dist[nodeA][all.GetByName(k)] + dist[all.GetByName(k)][nodeB]) < minDist {
+
+					PossibleLinks = make(map[*LocalityNode]bool)
+					//Updates mindist
+					minDist = dist[nodeA][all.GetByName(k)] + dist[all.GetByName(k)][nodeB]
+
+					PossibleLinks[all.GetByName(k)] = true
+					//Gets the links of previous links
+					for k, _ := range Links[nodeA][all.GetByName(k)] {
+
+						PossibleLinks[k] = true
+					}
+					//Gets the links of previous links
+
+					for k, _ := range Links[all.GetByName(k)][nodeB] {
+
+						PossibleLinks[k] = true
 					}
 
-
-
-
-				//Checks for the existance of the link in nodeB's OptimalBunch and for the distance
-
-
-				if nodeB.OptimalBunch[k] && (dist[nodeA][all.GetByName(k)] + dist[all.GetByName(k)][nodeB]) < minDist {
-
-						PossibleLinks = make(map[*LocalityNode]bool)
-						//Updates mindist
-						minDist = dist[nodeA][all.GetByName(k)] + dist[all.GetByName(k)][nodeB]
-
-						PossibleLinks[all.GetByName(k)] = true
-						//Gets the links of previous links
-						for k, _ := range Links[nodeA][all.GetByName(k)] {
-
-							PossibleLinks[k] = true
-						}
-						//Gets the links of previous links
-
-						for k, _ := range Links[all.GetByName(k)][nodeB] {
-
-							PossibleLinks[k] = true
-						}
-
-					}
-
 				}
-				//Adds the links one it finds the smallest distance
-				for k, _ := range PossibleLinks {
-
-					Links[nodeA][nodeB][k] = true
-					Links[nodeB][nodeA][k] = true
-
-				}
-				//Sets the distances
-				dist2[nodeA][nodeB] = minDist
-				dist2[nodeB][nodeA] = minDist
-
 
 			}
+			//Adds the links one it finds the smallest distance
+			for k, _ := range PossibleLinks {
+
+				Links[nodeA][nodeB][k] = true
+				Links[nodeB][nodeA][k] = true
+
+			}
+			//Sets the distances
+			dist2[nodeA][nodeB] = minDist
+			dist2[nodeB][nodeA] = minDist
+
+
 		}
-	*/
+	}
+*/
 
 	return dist2
 }

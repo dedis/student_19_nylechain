@@ -159,7 +159,6 @@ func (c *SimpleBLSCoSi) handlePrepareReplies(replies []*SimplePrepareReply) erro
 	log.Lvl3(c.ServerIdentity(), "aggregated")
 
 	if err := c.vf(c.Message, c.Tree().ID); err != nil {
-		log.Error(c.ServerIdentity(), "verification function failed with error: ", err)
 		return err
 	}
 

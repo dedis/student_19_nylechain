@@ -200,6 +200,10 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	wg.Add(n)
 	signatures := make([][]byte, n)
 	for i, tree := range args.Trees {
+		err := s.vf(args.Message, tree.ID)
+		if err != nil {
+			return nil, err
+		}
 		go func(i int, tree *onet.Tree) {
 			defer wg.Done()
 			pi, _ := s.CreateProtocol(protoName, tree)
