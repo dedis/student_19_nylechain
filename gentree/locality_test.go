@@ -22,6 +22,16 @@ func TestGenerateSubTrees(t *testing.T) {
 	lc := LocalityContext{}
 	lc.Setup(roster, "../nodeGen/nodes.txt")
 
+	for rootName, trees := range lc.LocalityTrees {
+		for _, n := range trees {
+			rosterNames := make([]string, 0)
+			for _,si := range n.Roster.List {
+				rosterNames = append(rosterNames, lc.Nodes.GetServerIdentityToName(si))
+			}
+			log.LLvl1("rootName ", rootName, "created onet locality tree with roster", rosterNames)
+		}
+	}
+
 	/*
 	subTreeReply, err := GenerateSubTrees(&SubTreeArgs{
 		Roster:       roster,

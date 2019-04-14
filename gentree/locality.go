@@ -17,9 +17,9 @@ import (
 type LocalityContext struct {
 	Nodes              LocalityNodes
 	// keys are node names, values are a slice of graph trees
-	GraphTree          map[string][]GraphTree
+	graphTree 			map[string][]GraphTree
 	// keys are node names, values are a slice of onet trees that are locality preserving
-	BinaryTree         map[string][]*onet.Tree
+	LocalityTrees        map[string][]*onet.Tree
 }
 
 
@@ -57,8 +57,8 @@ func (s *LocalityContext) Setup(roster *onet.Roster, nodesFile string) {
 	s.Nodes.All = nodes
 	s.Nodes.ClusterBunchDistances = make(map[*LocalityNode]map[*LocalityNode]float64)
 	s.Nodes.Links = make(map[*LocalityNode]map[*LocalityNode]map[*LocalityNode]bool)
-	s.GraphTree = make(map[string][]GraphTree)
-	s.BinaryTree = make(map[string][]*onet.Tree)
+	s.graphTree = make(map[string][]GraphTree)
+	s.LocalityTrees = make(map[string][]*onet.Tree)
 
 	s.Nodes.ServerIdentityToName = make(map[network.ServerIdentityID]string)
 
@@ -113,7 +113,7 @@ func (s *LocalityContext)genTrees(RandomCoordsLevels bool, Levels int, Optimized
 
 
 		for i, n := range tree {
-			s.GraphTree[crtRootName] = append(s.GraphTree[crtRootName], GraphTree{
+			s.graphTree[crtRootName] = append(s.graphTree[crtRootName], GraphTree{
 				n,
 				NodesList[i],
 				Parents[i],
@@ -121,7 +121,7 @@ func (s *LocalityContext)genTrees(RandomCoordsLevels bool, Levels int, Optimized
 		}
 	}
 
-	for rootName, graphTrees := range s.GraphTree {
+	for rootName, graphTrees := range s.graphTree {
 		for _, n := range graphTrees {
 
 			rosterNames := make([]string, 0)
@@ -129,9 +129,9 @@ func (s *LocalityContext)genTrees(RandomCoordsLevels bool, Levels int, Optimized
 				rosterNames = append(rosterNames, s.Nodes.GetServerIdentityToName(si))
 			}
 
-			log.LLvl1("rootName x", rootName, "creates binary with roster", rosterNames)
+			//log.LLvl1("rootName x", rootName, "creates binary with roster", rosterNames)
 
-			s.BinaryTree[rootName] = append(s.BinaryTree[rootName], s.createBinaryTreeFromGraphTree(n))
+			s.LocalityTrees[rootName] = append(s.LocalityTrees[rootName], s.createBinaryTreeFromGraphTree(n))
 		}
 	}
 }
