@@ -16,7 +16,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -40,7 +39,6 @@ func (t *TreeConverter) ToBinaryTreeNode(target *onet.TreeNode) (*onet.TreeNode,
 // LocalityNode represents a locality preserving node.
 type LocalityNode struct {
 	Name           string
-	IP             map[string]bool
 	X              float64
 	Y              float64
 	Level          int
@@ -53,11 +51,6 @@ type LocalityNode struct {
 	Rings          []string
 	NrOwnRings     int
 	ServerIdentity *network.ServerIdentity
-	AvailablePortsStart int
-	AvailablePortsEnd int
-	NextPort int
-	NextPortMtx sync.Mutex
-
 }
 
 // LocalityNodes is a list of LocalityNode
@@ -68,60 +61,9 @@ type LocalityNodes struct {
 	Links                 map[*LocalityNode]map[*LocalityNode]map[*LocalityNode]bool
 }
 
-// GetByIP gets the node by IP.
-func (ns LocalityNodes) GetByIP(ip string) *LocalityNode {
-
-	for _, n := range ns.All {
-		if n.IP[ip] {
-			return n
-		}
-	}
-	return nil
-}
-
-func (ns LocalityNodes) GetByServerIdentityIP(ip string) *LocalityNode {
-
-
-	for _, n := range ns.All {
-		//if strings.Contains(n.ServerIdentity.String(), ip) {
-		if n.IP[ip] {
-			return n
-		}
-	}
-	return nil
-}
-
-func (ns LocalityNodes) OccupyNextPort(ip string) int {
-
-	port := -1
-	for _, n := range ns.All {
-		if strings.Contains(n.ServerIdentity.String(), ip) {
-			n.NextPortMtx.Lock()
-			if n.NextPort != n.AvailablePortsEnd {
-				port = n.NextPort
-				n.NextPort++
-			}
-			n.NextPortMtx.Unlock()
-		}
-	}
-	return port
-}
-
-
 // GetByName gets the node by name.
 func (ns LocalityNodes) GetByName(name string) *LocalityNode {
 	nodeIdx := NodeNameToInt(name)
-
-	//log.LLvl1("name here is", name)
-
-	//log.LLvl1("ns length", len(ns.All), "nodeIdx", nodeIdx)
-	if len(ns.All) < nodeIdx {
-		//log.LLvl1("returning NOT fine")
-		return nil
-	}
-	//log.LLvl1("returning fine", ns.All[nodeIdx])
-	//log.LLvl1(ns.All)
-	return ns.All[nodeIdx%len(ns.All)]
 	return ns.All[nodeIdx]
 }
 
