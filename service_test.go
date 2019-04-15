@@ -1,7 +1,7 @@
 package nylechain
 
 import (
-	"crypto/sha256"
+	//"crypto/sha256"
 	"testing"
 
 	"github.com/dedis/student_19_nylechain/gentree"
@@ -67,8 +67,8 @@ func TestTreesBLSCoSi(t *testing.T) {
 	lc.Setup(roster, "nodeGen/nodes.txt")
 
 	PrivK0, PubK0 := bls.NewKeyPair(testSuite, random.New())
-	PrivK1, PubK1 := bls.NewKeyPair(testSuite, random.New())
-	_, PubK2 := bls.NewKeyPair(testSuite, random.New())
+	_, PubK1 := bls.NewKeyPair(testSuite, random.New())
+	//_, PubK2 := bls.NewKeyPair(testSuite, random.New())
 	iD0 := []byte("Genesis0")
 	iD1 := []byte("Genesis1")
 	coinID := []byte("0")
@@ -88,24 +88,25 @@ func TestTreesBLSCoSi(t *testing.T) {
 		Signature: signature,
 	}
 	txEncoded, _ := protobuf.Encode(&tx)
-	sha := sha256.New()
-	sha.Write(txEncoded)
-	iD01 := sha.Sum(nil)
 
 	// Second transaction
-	inner02 := transaction.InnerTx{
-		CoinID:     coinID,
-		PreviousTx: iD01,
-		SenderPK:   PubK1,
-		ReceiverPK: PubK2,
-	}
-	innerEncoded02, _ := protobuf.Encode(&inner02)
-	signature02, _ := bls.Sign(testSuite, PrivK1, innerEncoded02)
-	tx02 := transaction.Tx{
-		Inner:     inner02,
-		Signature: signature02,
-	}
-	txEncoded02, _ := protobuf.Encode(&tx02)
+	/*
+		sha := sha256.New()
+		sha.Write(txEncoded)
+		iD01 := sha.Sum(nil)
+		inner02 := transaction.InnerTx{
+			CoinID:     coinID,
+			PreviousTx: iD01,
+			SenderPK:   PubK1,
+			ReceiverPK: PubK2,
+		}
+		innerEncoded02, _ := protobuf.Encode(&inner02)
+		signature02, _ := bls.Sign(testSuite, PrivK1, innerEncoded02)
+		tx02 := transaction.Tx{
+			Inner:     inner02,
+			Signature: signature02,
+		}
+		txEncoded02, _ := protobuf.Encode(&tx02)*/
 
 	// First transaction of the second coin
 
@@ -140,10 +141,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 	txEncodedAlt, _ := protobuf.Encode(&txAlt)*/
 
 	for _, trees := range lc.LocalityTrees {
-		log.LLvl1("------")
 		for _, tree := range trees[1:] {
-			log.LLvl1(tree.ID)
-			log.LLvl1(tree.Roster.List)
 			for _, serverIdentity := range tree.Roster.List {
 				service := mapOfServers[serverIdentity.String()].Service(serviceName).(*Service)
 				treeSlice := []*onet.Tree{tree}
@@ -165,7 +163,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 		}
 	}
 
-	for _, server := range servers {
+	for _, server := range servers[:1] {
 		trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)][1:]
 		service := server.Service(serviceName).(*Service)
 		service.TreesBLSCoSi(&CoSiTrees{
@@ -175,10 +173,6 @@ func TestTreesBLSCoSi(t *testing.T) {
 		service.TreesBLSCoSi(&CoSiTrees{
 			Trees:   trees,
 			Message: txEncoded1,
-		})
-		service.TreesBLSCoSi(&CoSiTrees{
-			Trees:   trees,
-			Message: txEncoded02,
 		})
 	}
 

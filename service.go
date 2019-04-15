@@ -87,7 +87,6 @@ func (s *Service) vf(msg []byte, id onet.TreeID) error {
 		b := bboltTx.Bucket(s.bucketNameLastTx)
 		v := b.Get(append([]byte(id.String()), tx.Inner.CoinID...))
 		if bytes.Compare(v, tx.Inner.PreviousTx) != 0 {
-			log.LLvl1(id)
 			return errors.New("The previous transaction is not the last of the chain")
 		}
 		return nil
@@ -200,7 +199,6 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	wg.Add(n)
 	signatures := make([][]byte, n)
 	for i, tree := range args.Trees {
-		log.LLvl1(tree.ID)
 		err := s.vf(args.Message, tree.ID)
 		if err != nil {
 			return nil, err
@@ -259,6 +257,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 		// Non-initialization : we received a new aggregate structure that we need to store.
 		defer s.mutexs[data.TreeID.String()+string(data.Tx.Inner.CoinID)].Unlock()
 		// First check that Tx is valid with the vf
+		log.LLvl1(data)
 		err = s.vf(txEncoded, data.TreeID)
 		if err != nil {
 			return err

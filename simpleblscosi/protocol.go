@@ -157,7 +157,6 @@ func (c *SimpleBLSCoSi) handlePrepare(in *SimplePrepare) error {
 // The children's commitment must remain constants.
 func (c *SimpleBLSCoSi) handlePrepareReplies(replies []*SimplePrepareReply) error {
 	log.Lvl3(c.ServerIdentity(), "aggregated")
-	log.LLvl1(c.Tree().ID)
 	if err := c.vf(c.Message, c.Tree().ID); err != nil {
 		return err
 	}
