@@ -1,17 +1,15 @@
 package nylechain
 
 import (
-	"github.com/dedis/student_19_nylechain/gentree"
-	"testing"
-	/*"crypto/sha256"
+	"crypto/sha256"
 	"testing"
 
+	"github.com/dedis/student_19_nylechain/gentree"
 	"github.com/dedis/student_19_nylechain/transaction"
 	"go.dedis.ch/kyber/v3/util/random"
 	"go.dedis.ch/protobuf"
-	"go.etcd.io/bbolt"
 
-	"go.dedis.ch/kyber/v3/sign/bls"*/
+	"go.dedis.ch/kyber/v3/sign/bls"
 
 	"go.dedis.ch/kyber/v3/pairing"
 
@@ -59,18 +57,15 @@ func TestGenerateSubTrees(t *testing.T) {
 func TestTreesBLSCoSi(t *testing.T) {
 	local := onet.NewTCPTest(testSuite)
 	servers, roster, _ := local.GenTree(45, true)
+	mapOfServers := make(map[string]*onet.Server)
+	for _, server := range servers {
+		mapOfServers[server.ServerIdentity.String()] = server
+	}
 	defer local.CloseAll()
 
 	lc := gentree.LocalityContext{}
 	lc.Setup(roster, "nodeGen/nodes.txt")
-	
-/*
-	// We will run TreesBLSCoSi on 3 trees of sizes 3, 7 and 9.
-	subTreeReply, _ := GenerateSubTrees(&SubTreeArgs{
-		Roster:       roster,
-		BF:           2,
-		SubTreeCount: 2,
-	})
+
 	PrivK0, PubK0 := bls.NewKeyPair(testSuite, random.New())
 	PrivK1, PubK1 := bls.NewKeyPair(testSuite, random.New())
 	_, PubK2 := bls.NewKeyPair(testSuite, random.New())
@@ -78,22 +73,6 @@ func TestTreesBLSCoSi(t *testing.T) {
 	iD1 := []byte("Genesis1")
 	coinID := []byte("0")
 	coinID1 := []byte("1")
-
-	for _, s := range services {
-		s.(*Service).StoreTrees(subTreeReply.Trees)
-		s.(*Service).GenesisTx(&GenesisArgs{
-			ID:         iD0,
-			CoinID:     coinID,
-			TreeIDs:    subTreeReply.IDs,
-			ReceiverPK: PubK0,
-		})
-		s.(*Service).GenesisTx(&GenesisArgs{
-			ID:         iD1,
-			CoinID:     coinID1,
-			TreeIDs:    subTreeReply.IDs,
-			ReceiverPK: PubK0,
-		})
-	}
 
 	// First transaction
 	inner := transaction.InnerTx{
@@ -158,79 +137,92 @@ func TestTreesBLSCoSi(t *testing.T) {
 		Inner:     innerAlt,
 		Signature: signatureAlt,
 	}
-	txEncodedAlt, _ := protobuf.Encode(&txAlt)
+	txEncodedAlt, _ := protobuf.Encode(&txAlt)*/
 
-	// Launch protocols
+	for _, trees := range lc.LocalityTrees {
+		for _, tree := range trees {
+			for _, serverIdentity := range tree.Roster.List {
+				service := mapOfServers[serverIdentity.String()].Service(serviceName).(*Service)
+				treeSlice := []*onet.Tree{tree}
+				treeIDSlice := []onet.TreeID{tree.ID}
+				service.StoreTrees(treeSlice)
+				service.GenesisTx(&GenesisArgs{
+					ID:         iD0,
+					CoinID:     coinID,
+					TreeIDs:    treeIDSlice,
+					ReceiverPK: PubK0,
+				})
+				service.GenesisTx(&GenesisArgs{
+					ID:         iD1,
+					CoinID:     coinID1,
+					TreeIDs:    treeIDSlice,
+					ReceiverPK: PubK0,
+				})
+			}
+		}
+	}
 
-	// First Tx on coin 0, receiver is PubK1
-	go services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
-		Trees:   subTreeReply.Trees,
-		Roster:  roster,
-		Message: txEncoded,
-	})
-
-	// Double spending attempt, this time the receiver is PubK2
-	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
-		Trees:   subTreeReply.Trees,
-		Roster:  roster,
-		Message: txEncodedAlt,
-	})
-
-	// Launch a protocol on the same trees in parallel, but for a different coin (1).
-	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
-		Trees:   subTreeReply.Trees,
-		Roster:  roster,
-		Message: txEncoded1,
-	})
-
-	// Second transaction of coin 0
-	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
-		Trees:   subTreeReply.Trees,
-		Roster:  roster,
-		Message: txEncoded02,
-	})
-
-	// We do a loop for each treeID. We first get the latest Tx in the second bucket by usinge the right TreeID and coinID,
-	// then use that value to get the TxStorage in the first one. We then check that the stored senderPK is the right one.
-	for i := 0; i < 9; i++ {
-		services[i].(*Service).db.View(func(bboltTx *bbolt.Tx) error {
-			b := bboltTx.Bucket(services[i].(*Service).bucketNameLastTx)
-			v := b.Get(append([]byte(subTreeReply.IDs[2].String()), coinID...))
-			b = bboltTx.Bucket(services[i].(*Service).bucketNameTx)
-			v = b.Get(v)
-			txStorage := TxStorage{}
-			protobuf.Decode(v, &txStorage)
-			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK1))
-
-			return nil
+	for _, server := range servers {
+		trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)]
+		service := server.Service(serviceName).(*Service)
+		service.TreesBLSCoSi(&CoSiTrees{
+			Trees:   trees,
+			Message: txEncoded,
+		})
+		service.TreesBLSCoSi(&CoSiTrees{
+			Trees:   trees,
+			Message: txEncoded1,
+		})
+		service.TreesBLSCoSi(&CoSiTrees{
+			Trees:   trees,
+			Message: txEncoded02,
 		})
 	}
 
-	for i := 0; i < 7; i++ {
-		services[i].(*Service).db.View(func(bboltTx *bbolt.Tx) error {
-			b := bboltTx.Bucket(services[i].(*Service).bucketNameLastTx)
-			v := b.Get(append([]byte(subTreeReply.IDs[1].String()), coinID...))
-			b = bboltTx.Bucket(services[i].(*Service).bucketNameTx)
-			v = b.Get(v)
-			txStorage := TxStorage{}
-			protobuf.Decode(v, &txStorage)
-			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK1))
+	/*
 
-			return nil
-		})
-	}
 
-	for i := 0; i < 3; i++ {
-		services[i].(*Service).db.View(func(bboltTx *bbolt.Tx) error {
-			b := bboltTx.Bucket(services[i].(*Service).bucketNameLastTx)
-			v := b.Get(append([]byte(subTreeReply.IDs[0].String()), coinID...))
-			b = bboltTx.Bucket(services[i].(*Service).bucketNameTx)
-			v = b.Get(v)
-			txStorage := TxStorage{}
-			protobuf.Decode(v, &txStorage)
-			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK1))
-			return nil
-		})
-	}*/
+		// We do a loop for each treeID. We first get the latest Tx in the second bucket by usinge the right TreeID and coinID,
+		// then use that value to get the TxStorage in the first one. We then check that the stored senderPK is the right one.
+		for i := 0; i < 9; i++ {
+			services[i].(*Service).db.View(func(bboltTx *bbolt.Tx) error {
+				b := bboltTx.Bucket(services[i].(*Service).bucketNameLastTx)
+				v := b.Get(append([]byte(subTreeReply.IDs[2].String()), coinID...))
+				b = bboltTx.Bucket(services[i].(*Service).bucketNameTx)
+				v = b.Get(v)
+				txStorage := TxStorage{}
+				protobuf.Decode(v, &txStorage)
+				require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK1))
+
+				return nil
+			})
+		}
+
+		for i := 0; i < 7; i++ {
+			services[i].(*Service).db.View(func(bboltTx *bbolt.Tx) error {
+				b := bboltTx.Bucket(services[i].(*Service).bucketNameLastTx)
+				v := b.Get(append([]byte(subTreeReply.IDs[1].String()), coinID...))
+				b = bboltTx.Bucket(services[i].(*Service).bucketNameTx)
+				v = b.Get(v)
+				txStorage := TxStorage{}
+				protobuf.Decode(v, &txStorage)
+				require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK1))
+
+				return nil
+			})
+		}
+
+		for i := 0; i < 3; i++ {
+			services[i].(*Service).db.View(func(bboltTx *bbolt.Tx) error {
+				b := bboltTx.Bucket(services[i].(*Service).bucketNameLastTx)
+				v := b.Get(append([]byte(subTreeReply.IDs[0].String()), coinID...))
+				b = bboltTx.Bucket(services[i].(*Service).bucketNameTx)
+				v = b.Get(v)
+				txStorage := TxStorage{}
+				protobuf.Decode(v, &txStorage)
+				require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK1))
+				return nil
+			})
+		}*/
 
 }

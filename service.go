@@ -87,6 +87,8 @@ func (s *Service) vf(msg []byte, id onet.TreeID) error {
 		b := bboltTx.Bucket(s.bucketNameLastTx)
 		v := b.Get(append([]byte(id.String()), tx.Inner.CoinID...))
 		if bytes.Compare(v, tx.Inner.PreviousTx) != 0 {
+			log.LLvl1(v)
+			log.LLvl1(s.ServerIdentity())
 			return errors.New("The previous transaction is not the last of the chain")
 		}
 		return nil
