@@ -1,7 +1,9 @@
 package nylechain
 
 import (
-	"crypto/sha256"
+	"github.com/dedis/student_19_nylechain/gentree"
+	"testing"
+	/*"crypto/sha256"
 	"testing"
 
 	"github.com/dedis/student_19_nylechain/transaction"
@@ -9,7 +11,7 @@ import (
 	"go.dedis.ch/protobuf"
 	"go.etcd.io/bbolt"
 
-	"go.dedis.ch/kyber/v3/sign/bls"
+	"go.dedis.ch/kyber/v3/sign/bls"*/
 
 	"go.dedis.ch/kyber/v3/pairing"
 
@@ -54,13 +56,15 @@ func TestGenerateSubTrees(t *testing.T) {
 		size = tree.Size()
 	}
 }
-
 func TestTreesBLSCoSi(t *testing.T) {
 	local := onet.NewTCPTest(testSuite)
-	hosts, roster, _ := local.GenTree(9, true)
+	servers, roster, _ := local.GenTree(45, true)
 	defer local.CloseAll()
-	services := local.GetServices(hosts, SimpleBLSCoSiID)
 
+	lc := gentree.LocalityContext{}
+	lc.Setup(roster, "nodeGen/nodes.txt")
+	
+/*
 	// We will run TreesBLSCoSi on 3 trees of sizes 3, 7 and 9.
 	subTreeReply, _ := GenerateSubTrees(&SubTreeArgs{
 		Roster:       roster,
@@ -154,7 +158,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 		Inner:     innerAlt,
 		Signature: signatureAlt,
 	}
-	txEncodedAlt, _ := protobuf.Encode(&txAlt)*/
+	txEncodedAlt, _ := protobuf.Encode(&txAlt)
 
 	// Launch protocols
 
@@ -165,12 +169,12 @@ func TestTreesBLSCoSi(t *testing.T) {
 		Message: txEncoded,
 	})
 
-	/*// Double spending attempt, this time the receiver is PubK2
+	// Double spending attempt, this time the receiver is PubK2
 	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
 		Trees:   subTreeReply.Trees,
 		Roster:  roster,
 		Message: txEncodedAlt,
-	})*/
+	})
 
 	// Launch a protocol on the same trees in parallel, but for a different coin (1).
 	services[0].(*Service).TreesBLSCoSi(&CoSiTrees{
@@ -227,6 +231,6 @@ func TestTreesBLSCoSi(t *testing.T) {
 			require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK1))
 			return nil
 		})
-	}
+	}*/
 
 }

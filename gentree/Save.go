@@ -3,7 +3,7 @@ package gentree
 import (
 	"math"
 
-	"gopkg.in/dedis/onet.v2/log"
+	"go.dedis.ch/onet/v3/log"
 )
 
 //Removes a link from The LinkLlist

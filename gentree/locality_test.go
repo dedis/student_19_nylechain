@@ -3,16 +3,16 @@ package gentree
 import (
 	"testing"
 
-	"gopkg.in/dedis/onet.v2"
-	"gopkg.in/dedis/onet.v2/log"
-	"gopkg.in/dedis/kyber.v2/group/edwards25519"
+	"go.dedis.ch/kyber/v3/pairing"
+	"go.dedis.ch/onet/v3"
+	"go.dedis.ch/onet/v3/log"
 )
 
 func TestMain(m *testing.M) {
 	log.MainTest(m)
 }
 
-var testSuite = edwards25519.NewBlakeSHA256Ed25519()
+var testSuite = pairing.NewSuiteBn256()
 
 func TestGenerateSubTrees(t *testing.T) {
 	local := onet.NewTCPTest(testSuite)
@@ -25,7 +25,7 @@ func TestGenerateSubTrees(t *testing.T) {
 	for rootName, trees := range lc.LocalityTrees {
 		for _, n := range trees {
 			rosterNames := make([]string, 0)
-			for _,si := range n.Roster.List {
+			for _, si := range n.Roster.List {
 				rosterNames = append(rosterNames, lc.Nodes.GetServerIdentityToName(si))
 			}
 			log.LLvl1("rootName ", rootName, "created onet locality tree with roster", rosterNames)
@@ -33,30 +33,30 @@ func TestGenerateSubTrees(t *testing.T) {
 	}
 
 	/*
-	subTreeReply, err := GenerateSubTrees(&SubTreeArgs{
-		Roster:       roster,
-		BF:           2,
-		SubTreeCount: 3,
-	})
-	require.Nil(t, err)
-	size := 0
-	for _, tree := range subTreeReply.Trees {
-		bool := size < tree.Size()
-		require.True(t, bool)
-		size = tree.Size()
-	}
+		subTreeReply, err := GenerateSubTrees(&SubTreeArgs{
+			Roster:       roster,
+			BF:           2,
+			SubTreeCount: 3,
+		})
+		require.Nil(t, err)
+		size := 0
+		for _, tree := range subTreeReply.Trees {
+			bool := size < tree.Size()
+			require.True(t, bool)
+			size = tree.Size()
+		}
 
-	subTreeReply, err = GenerateSubTrees(&SubTreeArgs{
-		Roster:       roster,
-		BF:           4,
-		SubTreeCount: 1,
-	})
-	require.Nil(t, err)
-	size = 0
-	for _, tree := range subTreeReply.Trees {
-		bool := size < tree.Size()
-		require.True(t, bool)
-		size = tree.Size()
-	}
+		subTreeReply, err = GenerateSubTrees(&SubTreeArgs{
+			Roster:       roster,
+			BF:           4,
+			SubTreeCount: 1,
+		})
+		require.Nil(t, err)
+		size = 0
+		for _, tree := range subTreeReply.Trees {
+			bool := size < tree.Size()
+			require.True(t, bool)
+			size = tree.Size()
+		}
 	*/
 }

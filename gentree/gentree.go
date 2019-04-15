@@ -7,9 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/satori/go.uuid"
-	"gopkg.in/dedis/onet.v2"
-	"gopkg.in/dedis/onet.v2/log"
-	"gopkg.in/dedis/onet.v2/network"
+	"go.dedis.ch/onet/v3"
+	"go.dedis.ch/onet/v3/log"
+	"go.dedis.ch/onet/v3/network"
 	"math"
 	"math/rand"
 	"os"
@@ -902,7 +902,7 @@ func CreateOnetRings(all LocalityNodes, rootName string, dist2 map[*LocalityNode
 		countt++
 
 		if len(finalRoster.List) == prevRosterLen {
-			log.Lvl2("it's a repeat tree, skip it!")
+			log.Lvl3("it's a repeat tree, skip it!")
 			if countt == len(radiuses) {
 				break
 			}

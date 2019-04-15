@@ -32,10 +32,9 @@ type PropagateData struct {
 	TreeID    onet.TreeID
 }
 
-// CoSiTrees contains multiple trees and the complete roster.
+// CoSiTrees contains multiple trees and the encoded Tx.
 type CoSiTrees struct {
 	Trees   []*onet.Tree
-	Roster  *onet.Roster
 	Message []byte
 }
 

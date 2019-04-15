@@ -3,9 +3,9 @@ package gentree
 import (
 	"bufio"
 	"fmt"
-	"gopkg.in/dedis/onet.v2"
-	"gopkg.in/dedis/onet.v2/log"
-	"gopkg.in/dedis/onet.v2/network"
+	"go.dedis.ch/onet/v3"
+	"go.dedis.ch/onet/v3/log"
+	"go.dedis.ch/onet/v3/network"
 	"io"
 	"math"
 	"os"
@@ -103,9 +103,9 @@ func (s *LocalityContext)genTrees(RandomCoordsLevels bool, Levels int, Optimized
 		log.Lvl2("CHECK that distances make sense")
 		for src, m := range dist2 {
 			for dst, dist := range m {
-				log.Lvl2("comparing for", src.Name, "-", dst.Name, "physical dist", ComputeDist(src, dst, pingDist), "approx dist", dist)
+				log.Lvl3("comparing for", src.Name, "-", dst.Name, "physical dist", ComputeDist(src, dst, pingDist), "approx dist", dist)
 				if dist > 5 * ComputeDist(src, dst, pingDist) {
-					log.Lvl2("comparing for", src.Name, "-", dst.Name, "physical dist", ComputeDist(src, dst, pingDist), "approx dist", dist, "5x dist", 5 * ComputeDist(src, dst, pingDist))
+					log.Lvl3("comparing for", src.Name, "-", dst.Name, "physical dist", ComputeDist(src, dst, pingDist), "approx dist", dist, "5x dist", 5 * ComputeDist(src, dst, pingDist))
 					log.Lvl2("way too long!!!")
 			}
 			}
