@@ -87,8 +87,7 @@ func (s *Service) vf(msg []byte, id onet.TreeID) error {
 		b := bboltTx.Bucket(s.bucketNameLastTx)
 		v := b.Get(append([]byte(id.String()), tx.Inner.CoinID...))
 		if bytes.Compare(v, tx.Inner.PreviousTx) != 0 {
-			log.LLvl1(v)
-			log.LLvl1(s.ServerIdentity())
+			log.LLvl1(id)
 			return errors.New("The previous transaction is not the last of the chain")
 		}
 		return nil
@@ -112,7 +111,6 @@ func (s *Service) vf(msg []byte, id onet.TreeID) error {
 		}
 		return nil
 	})
-
 	return err
 }
 
@@ -202,6 +200,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	wg.Add(n)
 	signatures := make([][]byte, n)
 	for i, tree := range args.Trees {
+		log.LLvl1(tree.ID)
 		err := s.vf(args.Message, tree.ID)
 		if err != nil {
 			return nil, err

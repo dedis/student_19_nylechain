@@ -209,7 +209,7 @@ func CreateLocalityGraph(all LocalityNodes, randomCoords, randomLevels bool, lev
 
 
 	for _, n := range all.All {
-		log.LLvl1(n.Name, "cluster=", n.Cluster, "bunch=", n.Bunch)
+		log.Lvl3(n.Name, "cluster=", n.Cluster, "bunch=", n.Bunch)
 	}
 
 	// write to file

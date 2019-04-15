@@ -100,7 +100,7 @@ func (s *LocalityContext)genTrees(RandomCoordsLevels bool, Levels int, Optimized
 
 		// update distances only if i'm the root
 
-		log.Lvl2("CHECK that distances make sense")
+		log.Lvl3("CHECK that distances make sense")
 		for src, m := range dist2 {
 			for dst, dist := range m {
 				log.Lvl3("comparing for", src.Name, "-", dst.Name, "physical dist", ComputeDist(src, dst, pingDist), "approx dist", dist)

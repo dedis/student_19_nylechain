@@ -140,7 +140,10 @@ func TestTreesBLSCoSi(t *testing.T) {
 	txEncodedAlt, _ := protobuf.Encode(&txAlt)*/
 
 	for _, trees := range lc.LocalityTrees {
-		for _, tree := range trees {
+		log.LLvl1("------")
+		for _, tree := range trees[1:] {
+			log.LLvl1(tree.ID)
+			log.LLvl1(tree.Roster.List)
 			for _, serverIdentity := range tree.Roster.List {
 				service := mapOfServers[serverIdentity.String()].Service(serviceName).(*Service)
 				treeSlice := []*onet.Tree{tree}
@@ -163,7 +166,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 	}
 
 	for _, server := range servers {
-		trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)]
+		trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)][1:]
 		service := server.Service(serviceName).(*Service)
 		service.TreesBLSCoSi(&CoSiTrees{
 			Trees:   trees,
