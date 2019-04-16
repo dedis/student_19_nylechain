@@ -241,9 +241,14 @@ func (s *Service) propagateHandler(msg network.Message) {
 	err = s.db.Update(func(bboltTx *bbolt.Tx) error {
 		b := bboltTx.Bucket(s.bucketNameTx)
 		v := b.Get(h)
-		// Initialization : we only store Tx and no signature
+
+		// Initialization : no aggregate signature sent yet. We only store Tx if not already done.
 		// We don't store it as "LastTx" yet : we wait for an aggregate signature.
-		if v == nil {
+		if len(data.Signature) == 0 {
+			if v != nil {
+				// This Tx is already initialized in bbolt, we do nothing
+				return nil
+			}
 			txStorage, err := protobuf.Encode(&TxStorage{
 				Tx: data.Tx,
 			})
@@ -254,10 +259,11 @@ func (s *Service) propagateHandler(msg network.Message) {
 			err = b.Put(h, txStorage)
 			return err
 		}
+
 		// Non-initialization : we received a new aggregate structure that we need to store.
 		defer s.mutexs[data.TreeID.String()+string(data.Tx.Inner.CoinID)].Unlock()
+
 		// First check that Tx is valid with the vf
-		log.LLvl1(data)
 		err = s.vf(txEncoded, data.TreeID)
 		if err != nil {
 			return err

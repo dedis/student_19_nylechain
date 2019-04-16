@@ -230,7 +230,7 @@ func (s *LocalityContext) readNodesFromFile(filename string) {
 		lineNr++
 	}
 
-	log.LLvl2("Read nodes", s.Nodes.All)
+	log.Lvl3("Read nodes", s.Nodes.All)
 }
 
 

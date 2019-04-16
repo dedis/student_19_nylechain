@@ -1,7 +1,7 @@
 package nylechain
 
 import (
-	//"crypto/sha256"
+	"crypto/sha256"
 	"testing"
 
 	"github.com/dedis/student_19_nylechain/gentree"
@@ -67,8 +67,8 @@ func TestTreesBLSCoSi(t *testing.T) {
 	lc.Setup(roster, "nodeGen/nodes.txt")
 
 	PrivK0, PubK0 := bls.NewKeyPair(testSuite, random.New())
-	_, PubK1 := bls.NewKeyPair(testSuite, random.New())
-	//_, PubK2 := bls.NewKeyPair(testSuite, random.New())
+	PrivK1, PubK1 := bls.NewKeyPair(testSuite, random.New())
+	_, PubK2 := bls.NewKeyPair(testSuite, random.New())
 	iD0 := []byte("Genesis0")
 	iD1 := []byte("Genesis1")
 	coinID := []byte("0")
@@ -90,27 +90,27 @@ func TestTreesBLSCoSi(t *testing.T) {
 	txEncoded, _ := protobuf.Encode(&tx)
 
 	// Second transaction
-	/*
-		sha := sha256.New()
-		sha.Write(txEncoded)
-		iD01 := sha.Sum(nil)
-		inner02 := transaction.InnerTx{
-			CoinID:     coinID,
-			PreviousTx: iD01,
-			SenderPK:   PubK1,
-			ReceiverPK: PubK2,
-		}
-		innerEncoded02, _ := protobuf.Encode(&inner02)
-		signature02, _ := bls.Sign(testSuite, PrivK1, innerEncoded02)
-		tx02 := transaction.Tx{
-			Inner:     inner02,
-			Signature: signature02,
-		}
-		txEncoded02, _ := protobuf.Encode(&tx02)*/
+
+	sha := sha256.New()
+	sha.Write(txEncoded)
+	iD01 := sha.Sum(nil)
+	inner02 := transaction.InnerTx{
+		CoinID:     coinID,
+		PreviousTx: iD01,
+		SenderPK:   PubK1,
+		ReceiverPK: PubK2,
+	}
+	innerEncoded02, _ := protobuf.Encode(&inner02)
+	signature02, _ := bls.Sign(testSuite, PrivK1, innerEncoded02)
+	tx02 := transaction.Tx{
+		Inner:     inner02,
+		Signature: signature02,
+	}
+	txEncoded02, _ := protobuf.Encode(&tx02)
 
 	// First transaction of the second coin
 
-	inner1 := transaction.InnerTx{
+	/*inner1 := transaction.InnerTx{
 		CoinID:     coinID1,
 		PreviousTx: iD1,
 		SenderPK:   PubK0,
@@ -122,11 +122,11 @@ func TestTreesBLSCoSi(t *testing.T) {
 		Inner:     inner1,
 		Signature: signature1,
 	}
-	txEncoded1, _ := protobuf.Encode(&tx1)
+	txEncoded1, _ := protobuf.Encode(&tx1)*/
 
 	// Alternative first Tx of coin 0 sending to PubK2 instead of PubK1
 
-	/*innerAlt := transaction.InnerTx{
+	innerAlt := transaction.InnerTx{
 		CoinID:     coinID,
 		PreviousTx: iD0,
 		SenderPK:   PubK0,
@@ -138,7 +138,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 		Inner:     innerAlt,
 		Signature: signatureAlt,
 	}
-	txEncodedAlt, _ := protobuf.Encode(&txAlt)*/
+	txEncodedAlt, _ := protobuf.Encode(&txAlt)
 
 	for _, trees := range lc.LocalityTrees {
 		for _, tree := range trees[1:] {
@@ -163,17 +163,33 @@ func TestTreesBLSCoSi(t *testing.T) {
 		}
 	}
 
-	for _, server := range servers[:1] {
+	for _, server := range servers {
+		// I exclude the first tree of every slice since it only cointains one node
+		//go func(server *onet.Server) {
 		trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)][1:]
-		service := server.Service(serviceName).(*Service)
-		service.TreesBLSCoSi(&CoSiTrees{
-			Trees:   trees,
-			Message: txEncoded,
-		})
-		service.TreesBLSCoSi(&CoSiTrees{
-			Trees:   trees,
-			Message: txEncoded1,
-		})
+		if len(trees) > 0 {
+			// First valid Tx
+			service := server.Service(serviceName).(*Service)
+			service.TreesBLSCoSi(&CoSiTrees{
+				Trees:   trees,
+				Message: txEncoded,
+			})
+			// Double spending attempt
+			_, err := service.TreesBLSCoSi(&CoSiTrees{
+				Trees:   trees,
+				Message: txEncodedAlt,
+			})
+			log.Error(err)
+
+			// Second valid Tx
+			_, err = service.TreesBLSCoSi(&CoSiTrees{
+				Trees:   trees,
+				Message: txEncoded02,
+			})
+			log.Error(err)
+
+		}
+		//}(server)
 	}
 
 	/*
