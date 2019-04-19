@@ -253,7 +253,6 @@ func (s *Service) propagateHandler(msg network.Message) {
 				Tx: data.Tx,
 			})
 			if err != nil {
-				s.mutexs[data.TreeID.String()+string(data.Tx.Inner.CoinID)].Unlock()
 				return err
 			}
 			err = b.Put(h, txStorage)

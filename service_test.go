@@ -1,6 +1,7 @@
 package nylechain
 
 import (
+	"sync"
 	"crypto/sha256"
 	"testing"
 
@@ -141,7 +142,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 	txEncodedAlt, _ := protobuf.Encode(&txAlt)
 
 	for _, trees := range lc.LocalityTrees {
-		for _, tree := range trees[1:] {
+		for _, tree := range trees {
 			for _, serverIdentity := range tree.Roster.List {
 				service := mapOfServers[serverIdentity.String()].Service(serviceName).(*Service)
 				treeSlice := []*onet.Tree{tree}
@@ -163,14 +164,18 @@ func TestTreesBLSCoSi(t *testing.T) {
 		}
 	}
 
+	var wg sync.WaitGroup
+	n := len(servers)
+	wg.Add(n)
+
 	for _, server := range servers {
 		// I exclude the first tree of every slice since it only cointains one node
-		//go func(server *onet.Server) {
+		go func(server *onet.Server) {
 		trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)][1:]
 		if len(trees) > 0 {
 			// First valid Tx
 			service := server.Service(serviceName).(*Service)
-			service.TreesBLSCoSi(&CoSiTrees{
+			go service.TreesBLSCoSi(&CoSiTrees{
 				Trees:   trees,
 				Message: txEncoded,
 			})
@@ -179,18 +184,23 @@ func TestTreesBLSCoSi(t *testing.T) {
 				Trees:   trees,
 				Message: txEncodedAlt,
 			})
-			log.Error(err)
+			if err == nil {
+				log.Fatal("Double spending accepted")
+			}
 
 			// Second valid Tx
 			_, err = service.TreesBLSCoSi(&CoSiTrees{
 				Trees:   trees,
 				Message: txEncoded02,
 			})
-			log.Error(err)
-
+			log.ErrFatal(err)
+			
 		}
-		//}(server)
+		wg.Done()
+		}(server)
 	}
+
+	wg.Wait()
 
 	/*
 
