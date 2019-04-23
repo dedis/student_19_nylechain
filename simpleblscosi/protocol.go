@@ -1,6 +1,7 @@
 package simpleblscosi
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/dedis/student_19_nylechain/transaction"
@@ -28,10 +29,15 @@ type SimpleBLSCoSi struct {
 	prepareReply chan prepareReplyChan
 	commit       chan commitChan
 	commitReply  chan commitReplyChan
+	err          chan errorChan
+	shutdown     chan shutdownChan
 	done         chan bool
 
 	// FinalSignature is the channel that the root should listen on to get the final signature
 	FinalSignature chan []byte
+
+	// Problem is a non-nil error if the transaction was refused
+	Problem error
 }
 
 // VerificationFn is a verification functions
@@ -57,76 +63,73 @@ func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, mutexs map[stri
 	}
 
 	// Register the channels we want to register and listens on
-	err := node.RegisterChannels(&c.prepare, &c.prepareReply, &c.commit, &c.commitReply)
+	err := node.RegisterChannels(&c.prepare, &c.prepareReply, &c.commit, &c.commitReply, &c.err, &c.shutdown)
 	return c, err
 }
 
 // Dispatch will listen on the four channels we use (i.e. four steps)
 func (c *SimpleBLSCoSi) Dispatch() error {
-	var err error
-	var key string
-	// If c is the root it already has the message and we can lock
-	if c.IsRoot() {
-		tx := transaction.Tx{}
-		err = protobuf.Decode(c.Message, &tx)
-		if err != nil {
-			return err
-		}
-		key = c.Tree().ID.String() + string(tx.Inner.CoinID)
-		c.mutexs[key].Lock()
-	}
+	problem := false
 	nbrChild := len(c.Children())
-	// If not root, the node will receive the message here and we lock
 	if !c.IsRoot() {
 		log.Lvl3(c.ServerIdentity(), "waiting for prepare")
 		prep := (<-c.prepare).SimplePrepare
-		err = c.handlePrepare(&prep)
+		err := c.handlePrepare(&prep)
 		if err != nil {
 			return err
 		}
-		tx := transaction.Tx{}
-		err = protobuf.Decode(c.Message, &tx)
-		if err != nil {
-			return err
-		}
-		key = c.Tree().ID.String() + string(tx.Inner.CoinID)
-		c.mutexs[key].Lock()
 	}
 	if !c.IsLeaf() {
 		var buf []*SimplePrepareReply
+	Loop:
 		for i := 0; i < nbrChild; i++ {
-			reply := <-c.prepareReply
-			log.Lvlf3("%s collecting prepare replies %d/%d", c.ServerIdentity(), i, nbrChild)
-			buf = append(buf, &reply.SimplePrepareReply)
+			select {
+			case reply := <-c.prepareReply:
+				log.Lvlf3("%s collecting prepare replies %d/%d", c.ServerIdentity(), i, nbrChild)
+				buf = append(buf, &reply.SimplePrepareReply)
+			case err := <-c.err:
+				problem = true
+				c.handleError(&err.TransmitError)
+				break Loop
+			}
 		}
-		err = c.handlePrepareReplies(buf)
-		if err != nil {
-			c.mutexs[key].Unlock()
-			return err
+		if !problem {
+			err := c.handlePrepareReplies(buf)
+			if err != nil {
+				return err
+			}
 		}
 	}
-	if !c.IsRoot() {
+	if !c.IsRoot() && !problem {
 		log.Lvl3(c.ServerIdentity(), "waiting for commit")
 		commit := (<-c.commit).SimpleCommit
-		err = c.handleCommit(&commit)
+		err := c.handleCommit(&commit)
 		if err != nil {
-			c.mutexs[key].Unlock()
 			return err
 		}
 	}
-	if !c.IsLeaf() {
+	if !c.IsLeaf() && !problem {
 		var buf []*SimpleCommitReply
 		for i := 0; i < nbrChild; i++ {
 			commitReply := <-c.commitReply
 			log.Lvlf3("%s handling commitReply of child %d/%d", c.ServerIdentity(), i, nbrChild)
 			buf = append(buf, &commitReply.SimpleCommitReply)
 		}
-		err = c.handleCommitReplies(buf)
+		err := c.handleCommitReplies(buf)
 		if err != nil {
-			c.mutexs[key].Unlock()
 			return err
 		}
 	}
+	if !problem {
+		<-c.done
+		return nil
+	}
+
+	if !c.IsRoot() {
+		shutdown := (<-c.shutdown).Shutdown
+		c.handleShutdown(&shutdown)
+	}
+
 	<-c.done
 	return nil
 }
@@ -141,6 +144,15 @@ func (c *SimpleBLSCoSi) Start() error {
 // handlePrepare will pass the message to the round and send back the
 // output. If in == nil, we are root and we start the round.
 func (c *SimpleBLSCoSi) handlePrepare(in *SimplePrepare) error {
+
+	tx := transaction.Tx{}
+	err := protobuf.Decode(in.Message, &tx)
+	if err != nil {
+		return err
+	}
+	key := c.Tree().ID.String() + string(tx.Inner.CoinID)
+	c.mutexs[key].Lock()
+
 	c.Message = in.Message
 	log.Lvlf3("%s prepare message: %x", c.ServerIdentity(), c.Message)
 
@@ -157,20 +169,21 @@ func (c *SimpleBLSCoSi) handlePrepare(in *SimplePrepare) error {
 // The children's commitment must remain constants.
 func (c *SimpleBLSCoSi) handlePrepareReplies(replies []*SimplePrepareReply) error {
 	log.Lvl3(c.ServerIdentity(), "aggregated")
+
 	if err := c.vf(c.Message, c.Tree().ID); err != nil {
-		return err
+		return c.handleError(&TransmitError{Error: err.Error()})
 	}
 
 	// combine the signatures from the replies
 	mySig, err := bls.Sign(c.suite, c.Private(), c.Message)
 	if err != nil {
 		log.Error(c.ServerIdentity(), err)
-		return err
+		return c.handleError(&TransmitError{Error: err.Error()})
 	}
 	sigBuf, err := bls.AggregateSignatures(c.suite, append(prepareRepliesToSigs(replies), mySig)...)
 	if err != nil {
 		log.Error(c.ServerIdentity(), err)
-		return err
+		return c.handleError(&TransmitError{Error: err.Error()})
 	}
 
 	// if we are the root, we need to start the commit phase
@@ -245,6 +258,41 @@ func (c *SimpleBLSCoSi) handleCommitReplies(replies []*SimpleCommitReply) error 
 	log.Lvl2(c.ServerIdentity(), "sending the final signature to channel")
 	c.FinalSignature <- sigBuf
 	return nil
+}
+
+// handleError transmits the error up the tree
+func (c *SimpleBLSCoSi) handleError(tErr *TransmitError) error {
+	if c.IsRoot() {
+		return c.handleShutdown(&Shutdown{Error: tErr.Error})
+	}
+	return c.SendTo(c.Parent(), &TransmitError{Error: tErr.Error})
+}
+
+// handleShutdown unlocks and shuts down every node down the tree
+func (c *SimpleBLSCoSi) handleShutdown(shutdown *Shutdown) error {
+	defer func() {
+		// protocol is finished
+		close(c.done)
+		c.Done()
+	}()
+
+	tx := transaction.Tx{}
+	err := protobuf.Decode(c.Message, &tx)
+	if err != nil {
+		return err
+	}
+	key := c.Tree().ID.String() + string(tx.Inner.CoinID)
+	c.mutexs[key].Unlock()
+
+	if !c.IsLeaf() {
+		c.SendToChildren(shutdown)
+	}
+	if c.IsRoot() {
+		c.FinalSignature <- nil
+		c.Problem = errors.New(shutdown.Error)
+	}
+
+	return errors.New(shutdown.Error)
 }
 
 func commitRepliesToSigs(replies []*SimpleCommitReply) [][]byte {

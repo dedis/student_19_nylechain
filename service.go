@@ -198,6 +198,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	n := len(args.Trees)
 	wg.Add(n)
 	signatures := make([][]byte, n)
+	var problem error
 	for i, tree := range args.Trees {
 		err := s.vf(args.Message, tree.ID)
 		if err != nil {
@@ -209,17 +210,30 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 			pi.(*simpleblscosi.SimpleBLSCoSi).Message = args.Message
 			pi.Start()
 			// Send signatures one by one after the initialization
-			data := &PropagateData{
-				Tx:        tx,
-				Signature: <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature,
-				TreeID:    tree.ID,
+			sign := <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature
+			err = pi.(*simpleblscosi.SimpleBLSCoSi).Problem
+			if err != nil {
+				problem = err
+			} else {
+
+				data := &PropagateData{
+					Tx:        tx,
+					Signature: sign,
+					TreeID:    tree.ID,
+				}
+
+				// Only propagate to that specific tree
+				s.startPropagation(s.propagateF, tree, data)
+				signatures[i] = data.Signature
 			}
-			// Only propagate to that specific tree
-			s.startPropagation(s.propagateF, tree, data)
-			signatures[i] = data.Signature
 		}(i, tree)
 	}
 	wg.Wait()
+
+	if problem != nil {
+		return nil, problem
+	}
+	
 	return &CoSiReplyTrees{
 		Signatures: signatures,
 		Message:    args.Message,

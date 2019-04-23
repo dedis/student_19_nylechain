@@ -7,7 +7,7 @@ import (
 
 func init() {
 	network.RegisterMessages(&SimplePrepare{}, &SimplePrepareReply{},
-		&SimpleCommit{}, &SimpleCommitReply{})
+		&SimpleCommit{}, &SimpleCommitReply{}, &TransmitError{}, &Shutdown{})
 }
 
 // Prepare phase
@@ -58,3 +58,24 @@ type commitReplyChan struct {
 	SimpleCommitReply
 }
 
+// TransmitError transmits the error to the root
+type TransmitError struct {
+	Error string
+}
+
+// errorChan wraps TransmitError for onet.
+type errorChan struct {
+	*onet.TreeNode
+	TransmitError
+}
+
+// Shutdown is called when the root received an error, it goes down the tree shutting everything down
+type Shutdown struct {
+	Error string
+}
+
+// shutdownChan wraps Shutdown for onet.
+type shutdownChan struct {
+	*onet.TreeNode
+	Shutdown
+}

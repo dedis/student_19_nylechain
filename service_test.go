@@ -1,8 +1,8 @@
 package nylechain
 
 import (
-	"sync"
 	"crypto/sha256"
+	"sync"
 	"testing"
 
 	"github.com/dedis/student_19_nylechain/gentree"
@@ -127,7 +127,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 
 	// Alternative first Tx of coin 0 sending to PubK2 instead of PubK1
 
-	innerAlt := transaction.InnerTx{
+	/*innerAlt := transaction.InnerTx{
 		CoinID:     coinID,
 		PreviousTx: iD0,
 		SenderPK:   PubK0,
@@ -139,7 +139,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 		Inner:     innerAlt,
 		Signature: signatureAlt,
 	}
-	txEncodedAlt, _ := protobuf.Encode(&txAlt)
+	txEncodedAlt, _ := protobuf.Encode(&txAlt)*/
 
 	for _, trees := range lc.LocalityTrees {
 		for _, tree := range trees {
@@ -169,34 +169,45 @@ func TestTreesBLSCoSi(t *testing.T) {
 	wg.Add(n)
 
 	for _, server := range servers {
-		// I exclude the first tree of every slice since it only cointains one node
 		go func(server *onet.Server) {
-		trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)][1:]
-		if len(trees) > 0 {
-			// First valid Tx
-			service := server.Service(serviceName).(*Service)
-			go service.TreesBLSCoSi(&CoSiTrees{
-				Trees:   trees,
-				Message: txEncoded,
-			})
-			// Double spending attempt
-			_, err := service.TreesBLSCoSi(&CoSiTrees{
-				Trees:   trees,
-				Message: txEncodedAlt,
-			})
-			if err == nil {
-				log.Fatal("Double spending accepted")
-			}
+			// I exclude the first tree of every slice since it only contains one node
+			trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)][1:]
+			if len(trees) > 0 {
+				// First valid Tx
+				service := server.Service(serviceName).(*Service)
+				/*var w sync.WaitGroup
+				w.Add(1)
+				var err0 error
+				go func() {*/
+				_, err0 := service.TreesBLSCoSi(&CoSiTrees{
+					Trees:   trees,
+					Message: txEncoded,
+				})
+				log.ErrFatal(err0)
 
-			// Second valid Tx
-			_, err = service.TreesBLSCoSi(&CoSiTrees{
-				Trees:   trees,
-				Message: txEncoded02,
-			})
-			log.ErrFatal(err)
-			
-		}
-		wg.Done()
+				/*w.Done()
+				}()
+				// Double spending attempt
+				_, err := service.TreesBLSCoSi(&CoSiTrees{
+					Trees:   trees,
+					Message: txEncodedAlt,
+				})
+				w.Wait()
+				log.LLvl1(err0)
+				log.LLvl1(err)
+				if err == nil && err0 == nil {
+					log.Fatal("Double spending accepted")
+				}*/
+
+				// Second valid Tx
+				_, err := service.TreesBLSCoSi(&CoSiTrees{
+					Trees:   trees,
+					Message: txEncoded02,
+				})
+				log.ErrFatal(err)
+
+			}
+			wg.Done()
 		}(server)
 	}
 
