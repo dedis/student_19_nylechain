@@ -197,6 +197,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	var wg sync.WaitGroup
 	n := len(args.Trees)
 	wg.Add(n)
+	treeIDS := make([]onet.TreeID, n)
 	signatures := make([][]byte, n)
 	var problem error
 	for i, tree := range args.Trees {
@@ -224,6 +225,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 
 				// Only propagate to that specific tree
 				s.startPropagation(s.propagateF, tree, data)
+				treeIDS[i] = tree.ID
 				signatures[i] = data.Signature
 			}
 		}(i, tree)
@@ -231,10 +233,15 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	wg.Wait()
 
 	if problem != nil {
-		return nil, problem
+		return &CoSiReplyTrees{
+			TreeIDS: treeIDS,
+			Signatures: signatures,
+			Message:    args.Message,
+		}, problem
 	}
 	
 	return &CoSiReplyTrees{
+		TreeIDS: treeIDS,
 		Signatures: signatures,
 		Message:    args.Message,
 	}, nil

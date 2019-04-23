@@ -40,6 +40,7 @@ type CoSiTrees struct {
 
 // CoSiReplyTrees returns the signatures and the original message
 type CoSiReplyTrees struct {
+	TreeIDS []onet.TreeID
 	Signatures [][]byte
 	Message    []byte
 }

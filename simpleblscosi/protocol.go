@@ -69,7 +69,6 @@ func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, mutexs map[stri
 
 // Dispatch will listen on the four channels we use (i.e. four steps)
 func (c *SimpleBLSCoSi) Dispatch() error {
-	problem := false
 	nbrChild := len(c.Children())
 	if !c.IsRoot() {
 		log.Lvl3(c.ServerIdentity(), "waiting for prepare")
@@ -81,34 +80,50 @@ func (c *SimpleBLSCoSi) Dispatch() error {
 	}
 	if !c.IsLeaf() {
 		var buf []*SimplePrepareReply
-	Loop:
+
 		for i := 0; i < nbrChild; i++ {
 			select {
 			case reply := <-c.prepareReply:
 				log.Lvlf3("%s collecting prepare replies %d/%d", c.ServerIdentity(), i, nbrChild)
 				buf = append(buf, &reply.SimplePrepareReply)
 			case err := <-c.err:
-				problem = true
 				c.handleError(&err.TransmitError)
-				break Loop
+				if !c.IsRoot() {
+					shutdown := (<-c.shutdown).Shutdown
+					c.handleShutdown(&shutdown)
+				}
+				<-c.done
+				return nil
 			}
 		}
-		if !problem {
-			err := c.handlePrepareReplies(buf)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	if !c.IsRoot() && !problem {
-		log.Lvl3(c.ServerIdentity(), "waiting for commit")
-		commit := (<-c.commit).SimpleCommit
-		err := c.handleCommit(&commit)
+		err := c.handlePrepareReplies(buf)
 		if err != nil {
 			return err
 		}
 	}
-	if !c.IsLeaf() && !problem {
+	if !c.IsRoot() {
+		log.Lvl3(c.ServerIdentity(), "waiting for commit")
+		select {
+		case commit := <-c.commit:
+			err := c.handleCommit(&commit.SimpleCommit)
+			if err != nil {
+				return err
+			}
+		case err := <-c.err:
+			c.handleError(&err.TransmitError)
+			if !c.IsRoot() {
+				shutdown := (<-c.shutdown).Shutdown
+				c.handleShutdown(&shutdown)
+			}
+			<-c.done
+			return nil
+		case shutdown := <-c.shutdown:
+			c.handleShutdown(&shutdown.Shutdown)
+			<-c.done
+			return nil
+		}
+	}
+	if !c.IsLeaf() {
 		var buf []*SimpleCommitReply
 		for i := 0; i < nbrChild; i++ {
 			commitReply := <-c.commitReply
@@ -120,16 +135,6 @@ func (c *SimpleBLSCoSi) Dispatch() error {
 			return err
 		}
 	}
-	if !problem {
-		<-c.done
-		return nil
-	}
-
-	if !c.IsRoot() {
-		shutdown := (<-c.shutdown).Shutdown
-		c.handleShutdown(&shutdown)
-	}
-
 	<-c.done
 	return nil
 }

@@ -127,7 +127,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 
 	// Alternative first Tx of coin 0 sending to PubK2 instead of PubK1
 
-	/*innerAlt := transaction.InnerTx{
+	innerAlt := transaction.InnerTx{
 		CoinID:     coinID,
 		PreviousTx: iD0,
 		SenderPK:   PubK0,
@@ -139,7 +139,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 		Inner:     innerAlt,
 		Signature: signatureAlt,
 	}
-	txEncodedAlt, _ := protobuf.Encode(&txAlt)*/
+	txEncodedAlt, _ := protobuf.Encode(&txAlt)
 
 	for _, trees := range lc.LocalityTrees {
 		for _, tree := range trees {
@@ -165,27 +165,26 @@ func TestTreesBLSCoSi(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	n := len(servers)
+	n := len(servers[:1])
 	wg.Add(n)
 
-	for _, server := range servers {
+	for _, server := range servers[:1] {
 		go func(server *onet.Server) {
 			// I exclude the first tree of every slice since it only contains one node
 			trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)][1:]
 			if len(trees) > 0 {
 				// First valid Tx
 				service := server.Service(serviceName).(*Service)
-				/*var w sync.WaitGroup
+				var w sync.WaitGroup
 				w.Add(1)
 				var err0 error
-				go func() {*/
-				_, err0 := service.TreesBLSCoSi(&CoSiTrees{
-					Trees:   trees,
-					Message: txEncoded,
-				})
-				log.ErrFatal(err0)
+				go func() {
+					_, err0 = service.TreesBLSCoSi(&CoSiTrees{
+						Trees:   trees,
+						Message: txEncoded,
+					})
 
-				/*w.Done()
+					w.Done()
 				}()
 				// Double spending attempt
 				_, err := service.TreesBLSCoSi(&CoSiTrees{
@@ -193,18 +192,15 @@ func TestTreesBLSCoSi(t *testing.T) {
 					Message: txEncodedAlt,
 				})
 				w.Wait()
-				log.LLvl1(err0)
-				log.LLvl1(err)
 				if err == nil && err0 == nil {
 					log.Fatal("Double spending accepted")
-				}*/
+				}
 
 				// Second valid Tx
-				_, err := service.TreesBLSCoSi(&CoSiTrees{
+				_, err = service.TreesBLSCoSi(&CoSiTrees{
 					Trees:   trees,
 					Message: txEncoded02,
 				})
-				log.ErrFatal(err)
 
 			}
 			wg.Done()
