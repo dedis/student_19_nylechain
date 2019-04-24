@@ -14,7 +14,6 @@ import (
 
 	"go.dedis.ch/kyber/v3/pairing"
 
-	"github.com/stretchr/testify/require"
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/log"
 )
@@ -25,7 +24,7 @@ func TestMain(m *testing.M) {
 	log.MainTest(m)
 }
 
-func TestGenerateSubTrees(t *testing.T) {
+/*func TestGenerateSubTrees(t *testing.T) {
 	local := onet.NewTCPTest(testSuite)
 	_, roster, _ := local.GenTree(20, true)
 	defer local.CloseAll()
@@ -54,18 +53,38 @@ func TestGenerateSubTrees(t *testing.T) {
 		require.True(t, bool)
 		size = tree.Size()
 	}
-}
+}*/
 func TestTreesBLSCoSi(t *testing.T) {
 	local := onet.NewTCPTest(testSuite)
 	servers, roster, _ := local.GenTree(45, true)
 	mapOfServers := make(map[string]*onet.Server)
+	lc := gentree.LocalityContext{}
+	lc.Setup(roster, "nodeGen/nodes.txt")
+	defer local.CloseAll()
+
+	// Translating the trees into sets
+
+	var fullTreeSlice []*onet.Tree
+
 	for _, server := range servers {
 		mapOfServers[server.ServerIdentity.String()] = server
 	}
-	defer local.CloseAll()
 
-	lc := gentree.LocalityContext{}
-	lc.Setup(roster, "nodeGen/nodes.txt")
+	for _, trees := range lc.LocalityTrees {
+		for _, tree := range trees[1:] {
+			fullTreeSlice = append(fullTreeSlice, tree)
+			for _, serverIdentity := range tree.Roster.List {
+				service := mapOfServers[serverIdentity.String()].Service(serviceName).(*Service)
+				service.StoreTree(tree)
+			}
+		}
+	}
+
+	translations := TreesToSetsOfNodes(fullTreeSlice, roster.List)
+	for _, server := range servers {
+		service := server.Service(serviceName).(*Service)
+		service.Setup(lc.LocalityTrees, roster.List, translations)
+	}
 
 	PrivK0, PubK0 := bls.NewKeyPair(testSuite, random.New())
 	PrivK1, PubK1 := bls.NewKeyPair(testSuite, random.New())
@@ -145,9 +164,8 @@ func TestTreesBLSCoSi(t *testing.T) {
 		for _, tree := range trees {
 			for _, serverIdentity := range tree.Roster.List {
 				service := mapOfServers[serverIdentity.String()].Service(serviceName).(*Service)
-				treeSlice := []*onet.Tree{tree}
 				treeIDSlice := []onet.TreeID{tree.ID}
-				service.StoreTrees(treeSlice)
+				service.StoreTree(tree)
 				service.GenesisTx(&GenesisArgs{
 					ID:         iD0,
 					CoinID:     coinID,
@@ -192,7 +210,9 @@ func TestTreesBLSCoSi(t *testing.T) {
 					Message: txEncodedAlt,
 				})
 				w.Wait()
-				if err == nil && err0 == nil {
+				log.LLvl1(err0)
+				log.LLvl1(err)
+				if err0 == nil && err == nil {
 					log.Fatal("Double spending accepted")
 				}
 
@@ -201,7 +221,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 					Trees:   trees,
 					Message: txEncoded02,
 				})
-
+				log.LLvl1(err)
 			}
 			wg.Done()
 		}(server)

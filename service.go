@@ -46,10 +46,18 @@ type Service struct {
 	// are correctly handled.
 	*onet.ServiceProcessor
 
-	// Stores each tree which is going to be used by this service, keyed to its ID.
+	localityTrees map[string][]*onet.Tree
+
+	// Complete list of the Server Identities
+	orderedServerIdentities []*network.ServerIdentity
+
+	// Trees of which this server is a part of, keyed to TreeID
 	trees map[onet.TreeID]*onet.Tree
 
-	// Keys are concatenations of TreeID + CoinID
+	// Complete list of translation from a Tree to its ordered set
+	treeIDSToSets map[onet.TreeID][]byte
+
+	// Keys are concatenations of SetOfNodes + CoinID
 	mutexs map[string]*sync.Mutex
 
 	db *bbolt.DB
@@ -57,8 +65,8 @@ type Service struct {
 	// Stores each transaction and its aggregate signatures (struct TxStorage), keyed to a hash of the encoded Tx.
 	bucketNameTx []byte
 
-	// Stores the last Tx, hashed (its key in the first bucket) for each CoinID and Tree,
-	// keyed to a concatenation of TreeID + CoinID
+	// Stores the last Tx, hashed (its key in the first bucket) for each node set and CoinID,
+	// keyed to a concatenation of SetOfNodes + CoinID
 	bucketNameLastTx []byte
 
 	propagateF propagate.PropagationFunc
@@ -85,7 +93,9 @@ func (s *Service) vf(msg []byte, id onet.TreeID) error {
 	// Verify that the previous transaction is the last one of the chain
 	err = s.db.View(func(bboltTx *bbolt.Tx) error {
 		b := bboltTx.Bucket(s.bucketNameLastTx)
-		v := b.Get(append([]byte(id.String()), tx.Inner.CoinID...))
+		// Get the set of that TreeID's Tree
+		set := s.treeIDSToSets[id]
+		v := b.Get(append(set, tx.Inner.CoinID...))
 		if bytes.Compare(v, tx.Inner.PreviousTx) != 0 {
 			return errors.New("The previous transaction is not the last of the chain")
 		}
@@ -113,10 +123,37 @@ func (s *Service) vf(msg []byte, id onet.TreeID) error {
 	return err
 }
 
+// TreesToSetsOfNodes translates a Tree into an orderer slice of the nodes present in that tree.
+// The bytes are the indexes of s.orderedServerIdentities that are part of this tree, in increasing order.
+// This means that different trees on the same set of nodes will translate to the same set.
+// Example : Tree A has root orderedServerIdentities[3] and children orderedServerIdentities[0], orderedServerIdentities[1].
+// Tree B has root orderedServerIdentities[1] and children orderedServerIdentities[3], orderedServerIdentities[0].
+// Both will be stored as a same array of bytes : [byte(0), byte(1), byte(3)]
+// We use arrays of bytes because they will be used in bbolt.
+func TreesToSetsOfNodes(trees []*onet.Tree, orderedSlice []*network.ServerIdentity) map[onet.TreeID][]byte {
+	result := make(map[onet.TreeID][]byte)
+	for _, tree := range trees {
+		var set []byte
+		for i, serverIdentity := range orderedSlice {
+			// Check that this serverIdentity is in the tree's roster
+			// If yes, append i as a byte
+			for _, id := range tree.Roster.List {
+				if serverIdentity.Equal(id) {
+					set = append(set, byte(i))
+					break
+				}
+			}
+		}
+		result[tree.ID] = set
+	}
+	return result
+}
+
 // NewDefaultProtocol is the default protocol function, with a verification function that checks transactions.
 func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error) {
 	suite := pairing.NewSuiteBn256()
-	return simpleblscosi.NewProtocol(n, s.vf, s.mutexs, suite)
+	set := s.treeIDSToSets[n.Tree().ID]
+	return simpleblscosi.NewProtocol(n, s.vf, set, s.mutexs, suite)
 }
 
 // NewProtocol is an override. It's called on children automatically
@@ -124,7 +161,8 @@ func (s *Service) NewProtocol(n *onet.TreeNodeInstance, conf *onet.GenericConfig
 	switch n.ProtocolName() {
 	case protoName:
 		suite := pairing.NewSuiteBn256()
-		return simpleblscosi.NewProtocol(n, s.vf, s.mutexs, suite)
+		set := s.treeIDSToSets[n.Tree().ID]
+		return simpleblscosi.NewProtocol(n, s.vf, set, s.mutexs, suite)
 	case "Propagate":
 		return s.mypi(n)
 	default:
@@ -132,13 +170,17 @@ func (s *Service) NewProtocol(n *onet.TreeNodeInstance, conf *onet.GenericConfig
 	}
 }
 
-// StoreTrees stores the input trees in the map s.trees
-// It needs to be called on every service.
-func (s *Service) StoreTrees(trees []*onet.Tree) error {
-	for _, tree := range trees {
-		s.trees[tree.ID] = tree
-	}
-	return nil
+// Setup stores localityTrees, the ordered slice of Server Identities and the translations from Trees to Sets of nodes.
+func (s *Service) Setup(localityTrees map[string][]*onet.Tree, serverIDS []*network.ServerIdentity,
+	translations map[onet.TreeID][]byte) {
+	s.localityTrees = localityTrees
+	s.orderedServerIdentities = serverIDS
+	s.treeIDSToSets = translations
+}
+
+// StoreTree stores the input tree keyed on its ID.
+func (s *Service) StoreTree(tree *onet.Tree) {
+	s.trees[tree.ID] = tree
 }
 
 // GenesisTx creates and stores a genesis Tx with the specified ID (its key in the main bucket), CoinID and receiverPK.
@@ -162,9 +204,10 @@ func (s *Service) GenesisTx(args *GenesisArgs) error {
 		b = bboltTx.Bucket(s.bucketNameLastTx)
 		for _, id := range args.TreeIDs {
 			// Initialize the corresponding mutex
-			s.mutexs[id.String()+string(args.CoinID)] = &sync.Mutex{}
+			set := s.treeIDSToSets[id]
+			s.mutexs[string(set)+string(args.CoinID)] = &sync.Mutex{}
 			// Store as last Tx
-			err = b.Put(append([]byte(id.String()), args.CoinID...), args.ID)
+			err = b.Put(append(set, args.CoinID...), args.ID)
 			if err != nil {
 				return err
 			}
@@ -234,14 +277,14 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 
 	if problem != nil {
 		return &CoSiReplyTrees{
-			TreeIDS: treeIDS,
+			TreeIDS:    treeIDS,
 			Signatures: signatures,
 			Message:    args.Message,
 		}, problem
 	}
-	
+
 	return &CoSiReplyTrees{
-		TreeIDS: treeIDS,
+		TreeIDS:    treeIDS,
 		Signatures: signatures,
 		Message:    args.Message,
 	}, nil
@@ -281,7 +324,8 @@ func (s *Service) propagateHandler(msg network.Message) {
 		}
 
 		// Non-initialization : we received a new aggregate structure that we need to store.
-		defer s.mutexs[data.TreeID.String()+string(data.Tx.Inner.CoinID)].Unlock()
+		set := s.treeIDSToSets[data.TreeID]
+		defer s.mutexs[string(set)+string(data.Tx.Inner.CoinID)].Unlock()
 
 		// First check that Tx is valid with the vf
 		err = s.vf(txEncoded, data.TreeID)
@@ -313,7 +357,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 		}
 		// Update LastTx bucket too
 		b = bboltTx.Bucket(s.bucketNameLastTx)
-		err = b.Put(append([]byte(data.TreeID.String()), data.Tx.Inner.CoinID...), h)
+		err = b.Put(append(set, data.Tx.Inner.CoinID...), h)
 		return err
 	})
 	if err != nil {

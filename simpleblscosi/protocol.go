@@ -22,6 +22,9 @@ type SimpleBLSCoSi struct {
 	// the verification to run during upon receiving the prepare message
 	vf VerificationFn
 
+	// Inherited from the service
+	set []byte
+
 	// Keys are concatenations of TreeID + CoinID
 	mutexs map[string]*sync.Mutex
 
@@ -43,20 +46,14 @@ type SimpleBLSCoSi struct {
 // VerificationFn is a verification functions
 type VerificationFn func(msg []byte, id onet.TreeID) error
 
-// NewDefaultProtocol is the default protocol function used for registration
-// with an always-true verification.
-func NewDefaultProtocol(n *onet.TreeNodeInstance, mutexs map[string]*sync.Mutex) (onet.ProtocolInstance, error) {
-	vf := func(a []byte, id onet.TreeID) error { return nil }
-	return NewProtocol(n, vf, mutexs, pairing.NewSuiteBn256())
-}
-
 // NewProtocol is a callback that is executed when starting the protocol.
-func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, mutexs map[string]*sync.Mutex,
+func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, set []byte, mutexs map[string]*sync.Mutex,
 	suite *pairing.SuiteBn256) (onet.ProtocolInstance, error) {
 	c := &SimpleBLSCoSi{
 		TreeNodeInstance: node,
 		suite:            suite,
 		vf:               vf,
+		set:              set,
 		mutexs:           mutexs,
 		done:             make(chan bool),
 		FinalSignature:   make(chan []byte, 1),
@@ -155,7 +152,7 @@ func (c *SimpleBLSCoSi) handlePrepare(in *SimplePrepare) error {
 	if err != nil {
 		return err
 	}
-	key := c.Tree().ID.String() + string(tx.Inner.CoinID)
+	key := string(c.set) + string(tx.Inner.CoinID)
 	c.mutexs[key].Lock()
 
 	c.Message = in.Message
@@ -286,7 +283,7 @@ func (c *SimpleBLSCoSi) handleShutdown(shutdown *Shutdown) error {
 	if err != nil {
 		return err
 	}
-	key := c.Tree().ID.String() + string(tx.Inner.CoinID)
+	key := string(c.set) + string(tx.Inner.CoinID)
 	c.mutexs[key].Unlock()
 
 	if !c.IsLeaf() {
