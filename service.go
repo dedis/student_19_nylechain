@@ -123,12 +123,12 @@ func (s *Service) vf(msg []byte, id onet.TreeID) error {
 	return err
 }
 
-// TreesToSetsOfNodes translates a Tree into an orderer slice of the nodes present in that tree.
-// The bytes are the indexes of s.orderedServerIdentities that are part of this tree, in increasing order.
+// TreesToSetsOfNodes translates a Tree into an ordered slice of the nodes present in that tree.
+// The bytes are the indexes of orderedSlice that are part of this tree, in increasing order.
 // This means that different trees on the same set of nodes will translate to the same set.
-// Example : Tree A has root orderedServerIdentities[3] and children orderedServerIdentities[0], orderedServerIdentities[1].
-// Tree B has root orderedServerIdentities[1] and children orderedServerIdentities[3], orderedServerIdentities[0].
-// Both will be stored as a same array of bytes : [byte(0), byte(1), byte(3)]
+// Example : Tree A has root orderedSlice[3] and children orderedSlice[0], orderedSlice[1].
+// Tree B has root orderedSlice[1] and children orderedSlice[3], orderedSlice[0].
+// Both will be translated to a same array of bytes : [byte(0), byte(1), byte(3)]
 // We use arrays of bytes because they will be used in bbolt.
 func TreesToSetsOfNodes(trees []*onet.Tree, orderedSlice []*network.ServerIdentity) map[onet.TreeID][]byte {
 	result := make(map[onet.TreeID][]byte)
