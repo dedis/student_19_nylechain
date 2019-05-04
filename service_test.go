@@ -1,7 +1,7 @@
 package nylechain
 
 import (
-	//"crypto/sha256"
+	"crypto/sha256"
 	"sync"
 	"testing"
 
@@ -87,8 +87,8 @@ func TestTreesBLSCoSi(t *testing.T) {
 	}
 
 	PrivK0, PubK0 := bls.NewKeyPair(testSuite, random.New())
-	_, PubK1 := bls.NewKeyPair(testSuite, random.New())
-	//_, PubK2 := bls.NewKeyPair(testSuite, random.New())
+	PrivK1, PubK1 := bls.NewKeyPair(testSuite, random.New())
+	_, PubK2 := bls.NewKeyPair(testSuite, random.New())
 	iD0 := []byte("Genesis0")
 	iD1 := []byte("Genesis1")
 	coinID := []byte("0")
@@ -111,7 +111,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 
 	// Second transaction
 
-	/*sha := sha256.New()
+	sha := sha256.New()
 	sha.Write(txEncoded)
 	iD01 := sha.Sum(nil)
 	inner02 := transaction.InnerTx{
@@ -126,7 +126,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 		Inner:     inner02,
 		Signature: signature02,
 	}
-	txEncoded02, _ := protobuf.Encode(&tx02)*/
+	txEncoded02, _ := protobuf.Encode(&tx02)
 
 	// First transaction of the second coin
 
@@ -146,7 +146,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 
 	// Alternative first Tx of coin 0 sending to PubK2 instead of PubK1
 
-	/*innerAlt := transaction.InnerTx{
+	innerAlt := transaction.InnerTx{
 		CoinID:     coinID,
 		PreviousTx: iD0,
 		SenderPK:   PubK0,
@@ -158,7 +158,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 		Inner:     innerAlt,
 		Signature: signatureAlt,
 	}
-	txEncodedAlt, _ := protobuf.Encode(&txAlt)*/
+	txEncodedAlt, _ := protobuf.Encode(&txAlt)
 
 	for _, trees := range lc.LocalityTrees {
 		for _, tree := range trees {
@@ -182,9 +182,9 @@ func TestTreesBLSCoSi(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	n := len(servers[:7])
+	n := len(servers[:1])
 	wg.Add(n)
-	for _, server := range servers[:7] {
+	for _, server := range servers[:1] {
 		go func(server *onet.Server) {
 			// I exclude the first tree of every slice since it only contains one node
 			trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)][1:]
@@ -194,15 +194,15 @@ func TestTreesBLSCoSi(t *testing.T) {
 			if len(trees) > 0 {
 				// First valid Tx
 				service := server.Service(serviceName).(*Service)
-				/*var w sync.WaitGroup
+				var w sync.WaitGroup
 				w.Add(1)
 				var err0 error
-				go func() {*/
-				service.TreesBLSCoSi(&CoSiTrees{
+				go func() {
+				_, err0 = service.TreesBLSCoSi(&CoSiTrees{
 					Trees:   trees,
 					Message: txEncoded,
 				})
-				/*
+				
 						w.Done()
 					}()
 					// Double spending attempt
@@ -221,7 +221,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 					_, err = service.TreesBLSCoSi(&CoSiTrees{
 						Trees:   trees,
 						Message: txEncoded02,
-					})*/
+					})
 				//log.LLvl1(err)
 			} else {
 				log.LLvl1("0 TREE")

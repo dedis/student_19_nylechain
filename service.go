@@ -74,7 +74,7 @@ type Service struct {
 }
 
 // vf checks transactions.
-func (s *Service) vf(msg []byte, id onet.TreeID) error {
+func (s *Service) vf(msg []byte) error {
 	tx := transaction.Tx{}
 	err := protobuf.Decode(msg, &tx)
 	if err != nil {
@@ -93,13 +93,18 @@ func (s *Service) vf(msg []byte, id onet.TreeID) error {
 	// Verify that the previous transaction is the last one of the chain
 	err = s.db.View(func(bboltTx *bbolt.Tx) error {
 		b := bboltTx.Bucket(s.bucketNameLastTx)
-		// Get the set of that TreeID's Tree
-		set := s.treeIDSToSets[id]
-		v := b.Get(append(set, tx.Inner.CoinID...))
-		if bytes.Compare(v, tx.Inner.PreviousTx) != 0 {
-			return errors.New("The previous transaction is not the last of the chain")
+		// We iterate on the ids of trees this node is a part of.
+		// If the previousTx is stored as last transaction for one of those trees,
+		// we dont return an error.
+		for id := range s.trees {
+			// Get the set of that TreeID's Tree
+			set := s.treeIDSToSets[id]
+			v := b.Get(append(set, tx.Inner.CoinID...))
+			if (v != nil) && (bytes.Compare(v, tx.Inner.PreviousTx) == 0) {
+				return nil
+			}
 		}
-		return nil
+		return errors.New("The previous transaction is not the last of the chain")
 	})
 
 	if err != nil {
@@ -244,7 +249,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	signatures := make([][]byte, n)
 	var problem error
 	for i, tree := range args.Trees {
-		err := s.vf(args.Message, tree.ID)
+		err := s.vf(args.Message)
 		if err != nil {
 			return nil, err
 		}
@@ -328,7 +333,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 		defer s.mutexs[string(set)+string(data.Tx.Inner.CoinID)].Unlock()
 
 		// First check that Tx is valid with the vf
-		err = s.vf(txEncoded, data.TreeID)
+		err = s.vf(txEncoded)
 		if err != nil {
 			return err
 		}

@@ -44,7 +44,7 @@ type SimpleBLSCoSi struct {
 }
 
 // VerificationFn is a verification functions
-type VerificationFn func(msg []byte, id onet.TreeID) error
+type VerificationFn func(msg []byte) error
 
 // NewProtocol is a callback that is executed when starting the protocol.
 func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, set []byte, mutexs map[string]*sync.Mutex,
@@ -172,7 +172,7 @@ func (c *SimpleBLSCoSi) handlePrepare(in *SimplePrepare) error {
 func (c *SimpleBLSCoSi) handlePrepareReplies(replies []*SimplePrepareReply) error {
 	log.Lvl3(c.ServerIdentity(), "aggregated")
 
-	if err := c.vf(c.Message, c.Tree().ID); err != nil {
+	if err := c.vf(c.Message); err != nil {
 		return c.handleError(&TransmitError{Error: err.Error()})
 	}
 
