@@ -168,17 +168,14 @@ func TestTreesBLSCoSi(t *testing.T) {
 		for _, tree := range trees {
 			for _, serverIdentity := range tree.Roster.List {
 				service := mapOfServers[serverIdentity.String()].Service(ServiceName).(*Service)
-				treeIDSlice := []onet.TreeID{tree.ID}
 				service.GenesisTx(&GenesisArgs{
 					ID:         iD0,
 					CoinID:     coinID,
-					TreeIDs:    treeIDSlice,
 					ReceiverPK: PubK0,
 				})
 				service.GenesisTx(&GenesisArgs{
 					ID:         iD1,
 					CoinID:     coinID1,
-					TreeIDs:    treeIDSlice,
 					ReceiverPK: PubK0,
 				})
 			}

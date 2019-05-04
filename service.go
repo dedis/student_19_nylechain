@@ -188,8 +188,6 @@ func (s *Service) StoreTree(arg *StoreTreeArg) (*VoidReply, error) {
 
 // GenesisTx creates and stores a genesis Tx with the specified ID (its key in the main bucket), CoinID and receiverPK.
 // This will be the previousTx of the first real Tx, which needs it to pass the verification function.
-// It also takes the IDs of the trees where the first Tx will be run, so that the genesis Tx can be stored
-// as last transaction for each of the trees in the second boltdb bucket.
 // It needs to be called on every service.
 func (s *Service) GenesisTx(args *GenesisArgs) (*VoidReply, error) {
 	storage, err := protobuf.Encode(&TxStorage{Tx: transaction.Tx{Inner: transaction.InnerTx{ReceiverPK: args.ReceiverPK}}})
@@ -205,7 +203,7 @@ func (s *Service) GenesisTx(args *GenesisArgs) (*VoidReply, error) {
 		}
 		// Store as last transaction in the LastTx bucket for every TreeID
 		b = bboltTx.Bucket(s.bucketNameLastTx)
-		for _, id := range args.TreeIDs {
+		for id := range s.trees {
 			// Initialize the corresponding mutex
 			set := s.treeIDSToSets[id]
 			s.mutexs[string(set)+string(args.CoinID)] = &sync.Mutex{}

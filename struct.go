@@ -27,13 +27,13 @@ const (
 )
 
 // VoidReply is used when there's nothing to reply
-type VoidReply struct {}
+type VoidReply struct{}
 
 // SetupArgs contains the arguments for service method Setup
 type SetupArgs struct {
 	LocalityTrees map[string][]*onet.Tree
-	ServerIDS []*network.ServerIdentity
-	Translations map[onet.TreeID][]byte
+	ServerIDS     []*network.ServerIdentity
+	Translations  map[onet.TreeID][]byte
 }
 
 // StoreTreeArg contains the argument for service method StoreTree
@@ -56,7 +56,7 @@ type CoSiTrees struct {
 
 // CoSiReplyTrees returns the signatures and the original message
 type CoSiReplyTrees struct {
-	TreeIDS []onet.TreeID
+	TreeIDS    []onet.TreeID
 	Signatures [][]byte
 	Message    []byte
 }
@@ -79,7 +79,6 @@ type SubTreeReply struct {
 type GenesisArgs struct {
 	ID         []byte
 	CoinID     []byte
-	TreeIDs    []onet.TreeID
 	ReceiverPK kyber.Point
 }
 
