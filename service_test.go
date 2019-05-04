@@ -164,22 +164,18 @@ func TestTreesBLSCoSi(t *testing.T) {
 	}
 	txEncodedAlt, _ := protobuf.Encode(&txAlt)*/
 
-	for _, trees := range lc.LocalityTrees {
-		for _, tree := range trees {
-			for _, serverIdentity := range tree.Roster.List {
-				service := mapOfServers[serverIdentity.String()].Service(ServiceName).(*Service)
-				service.GenesisTx(&GenesisArgs{
-					ID:         iD0,
-					CoinID:     coinID,
-					ReceiverPK: PubK0,
-				})
-				service.GenesisTx(&GenesisArgs{
-					ID:         iD1,
-					CoinID:     coinID1,
-					ReceiverPK: PubK0,
-				})
-			}
-		}
+	for _, server := range servers {
+		service := server.Service(ServiceName).(*Service)
+		service.GenesisTx(&GenesisArgs{
+			ID:         iD0,
+			CoinID:     coinID,
+			ReceiverPK: PubK0,
+		})
+		service.GenesisTx(&GenesisArgs{
+			ID:         iD1,
+			CoinID:     coinID1,
+			ReceiverPK: PubK0,
+		})
 	}
 
 	var wg sync.WaitGroup

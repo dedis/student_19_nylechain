@@ -2,6 +2,7 @@ package nylechain
 
 import (
 	"go.dedis.ch/cothority/v3"
+	"go.dedis.ch/kyber/v3"
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/network"
 )
@@ -33,6 +34,18 @@ func (c *Client) Setup(servers []*onet.Server, translations map[onet.TreeID][]by
 	void := &VoidReply{}
 	for _, si := range serverIDS {
 		err := c.SendProtobuf(si, &SetupArgs{localityTrees, serverIDS, translations}, void)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// GenesisTx sends a GenesisArgs to every server. It returns an error if there was one for any of the servers.
+func (c *Client) GenesisTx(servers []*onet.Server, id []byte, coinID []byte, receiverPK kyber.Point) error {
+	void := &VoidReply{}
+	for _, server := range servers {
+		err := c.SendProtobuf(server.ServerIdentity, &GenesisArgs{id, coinID, receiverPK}, void)
 		if err != nil {
 			return err
 		}
