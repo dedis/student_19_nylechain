@@ -32,11 +32,13 @@ import (
 var SimpleBLSCoSiID onet.ServiceID
 
 const protoName = "simpleBLSCoSi"
-const serviceName = "SimpleBLSCoSi"
+
+// ServiceName is also used in api.go for example
+const ServiceName = "SimpleBLSCoSi"
 
 func init() {
 	var err error
-	SimpleBLSCoSiID, err = onet.RegisterNewService(serviceName, newService)
+	SimpleBLSCoSiID, err = onet.RegisterNewService(ServiceName, newService)
 	log.ErrFatal(err)
 }
 
@@ -171,16 +173,17 @@ func (s *Service) NewProtocol(n *onet.TreeNodeInstance, conf *onet.GenericConfig
 }
 
 // Setup stores localityTrees, the ordered slice of Server Identities and the translations from Trees to Sets of nodes.
-func (s *Service) Setup(localityTrees map[string][]*onet.Tree, serverIDS []*network.ServerIdentity,
-	translations map[onet.TreeID][]byte) {
-	s.localityTrees = localityTrees
-	s.orderedServerIdentities = serverIDS
-	s.treeIDSToSets = translations
+func (s *Service) Setup(args *SetupArgs) (*VoidReply, error) {
+	s.localityTrees = args.LocalityTrees
+	s.orderedServerIdentities = args.ServerIDS
+	s.treeIDSToSets = args.Translations
+	return &VoidReply{}, nil
 }
 
 // StoreTree stores the input tree keyed on its ID.
-func (s *Service) StoreTree(tree *onet.Tree) {
-	s.trees[tree.ID] = tree
+func (s *Service) StoreTree(arg *StoreTreeArg) (*VoidReply, error) {
+	s.trees[arg.Tree.ID] = arg.Tree
+	return &VoidReply{}, nil
 }
 
 // GenesisTx creates and stores a genesis Tx with the specified ID (its key in the main bucket), CoinID and receiverPK.
@@ -188,10 +191,10 @@ func (s *Service) StoreTree(tree *onet.Tree) {
 // It also takes the IDs of the trees where the first Tx will be run, so that the genesis Tx can be stored
 // as last transaction for each of the trees in the second boltdb bucket.
 // It needs to be called on every service.
-func (s *Service) GenesisTx(args *GenesisArgs) error {
+func (s *Service) GenesisTx(args *GenesisArgs) (*VoidReply, error) {
 	storage, err := protobuf.Encode(&TxStorage{Tx: transaction.Tx{Inner: transaction.InnerTx{ReceiverPK: args.ReceiverPK}}})
 	if err != nil {
-		return err
+		return &VoidReply{}, err
 	}
 	err = s.db.Update(func(bboltTx *bbolt.Tx) error {
 		// Store in the main bucket
@@ -214,7 +217,7 @@ func (s *Service) GenesisTx(args *GenesisArgs) error {
 		}
 		return nil
 	})
-	return err
+	return &VoidReply{}, err
 }
 
 // TreesBLSCoSi is used when multiple subtrees are already constructed and runs the protocol on them concurrently.
@@ -428,6 +431,10 @@ func newService(c *onet.Context) (onet.Service, error) {
 	_, err := c.ProtocolRegister(protoName, s.NewDefaultProtocol)
 	if err != nil {
 		return nil, err
+	}
+
+	if err := s.RegisterHandlers(s.GenesisTx, s.Setup, s.StoreTree, s.TreesBLSCoSi); err != nil {
+		return nil, errors.New("Couldn't register messages")
 	}
 
 	s.propagateF, s.mypi, err = propagate.NewPropagationFunc(c, "Propagate", s.propagateHandler, -1)

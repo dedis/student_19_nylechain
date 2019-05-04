@@ -16,7 +16,8 @@ func init() {
 		SubTreeArgs{}, SubTreeReply{},
 		CoSiTrees{}, CoSiReplyTrees{},
 		TxStorage{}, PropagateData{},
-		GenesisArgs{},
+		GenesisArgs{}, SetupArgs{},
+		StoreTreeArg{}, VoidReply{},
 	)
 }
 
@@ -24,6 +25,21 @@ const (
 	// ErrorParse indicates an error while parsing the protobuf-file.
 	ErrorParse = iota + 4000
 )
+
+// VoidReply is used when there's nothing to reply
+type VoidReply struct {}
+
+// SetupArgs contains the arguments for service method Setup
+type SetupArgs struct {
+	LocalityTrees map[string][]*onet.Tree
+	ServerIDS []*network.ServerIdentity
+	Translations map[onet.TreeID][]byte
+}
+
+// StoreTreeArg contains the argument for service method StoreTree
+type StoreTreeArg struct {
+	Tree *onet.Tree
+}
 
 // PropagateData is what is received by propagateHandler. It's propagated by TreesBLSCoSi.
 type PropagateData struct {

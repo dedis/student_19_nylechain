@@ -74,16 +74,20 @@ func TestTreesBLSCoSi(t *testing.T) {
 		for _, tree := range trees[1:] {
 			fullTreeSlice = append(fullTreeSlice, tree)
 			for _, serverIdentity := range tree.Roster.List {
-				service := mapOfServers[serverIdentity.String()].Service(serviceName).(*Service)
-				service.StoreTree(tree)
+				service := mapOfServers[serverIdentity.String()].Service(ServiceName).(*Service)
+				service.StoreTree(&StoreTreeArg{Tree: tree})
 			}
 		}
 	}
 
 	translations := TreesToSetsOfNodes(fullTreeSlice, roster.List)
 	for _, server := range servers {
-		service := server.Service(serviceName).(*Service)
-		service.Setup(lc.LocalityTrees, roster.List, translations)
+		service := server.Service(ServiceName).(*Service)
+		service.Setup(&SetupArgs{
+			LocalityTrees: lc.LocalityTrees,
+			ServerIDS:     roster.List,
+			Translations:  translations,
+		})
 	}
 
 	PrivK0, PubK0 := bls.NewKeyPair(testSuite, random.New())
@@ -163,7 +167,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 	for _, trees := range lc.LocalityTrees {
 		for _, tree := range trees {
 			for _, serverIdentity := range tree.Roster.List {
-				service := mapOfServers[serverIdentity.String()].Service(serviceName).(*Service)
+				service := mapOfServers[serverIdentity.String()].Service(ServiceName).(*Service)
 				treeIDSlice := []onet.TreeID{tree.ID}
 				service.GenesisTx(&GenesisArgs{
 					ID:         iD0,
@@ -182,9 +186,9 @@ func TestTreesBLSCoSi(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	n := len(servers[:7])
+	n := len(servers[:5])
 	wg.Add(n)
-	for _, server := range servers[:7] {
+	for _, server := range servers[:5] {
 		go func(server *onet.Server) {
 			// I exclude the first tree of every slice since it only contains one node
 			trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)][1:]
@@ -193,7 +197,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 			}
 			if len(trees) > 0 {
 				// First valid Tx
-				service := server.Service(serviceName).(*Service)
+				service := server.Service(ServiceName).(*Service)
 				/*var w sync.WaitGroup
 				w.Add(1)
 				var err0 error
