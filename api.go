@@ -1,10 +1,12 @@
 package nylechain
 
 import (
+	"github.com/dedis/student_19_nylechain/service"
 	"go.dedis.ch/cothority/v3"
 	"go.dedis.ch/kyber/v3"
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/network"
+	"go.dedis.ch/onet/v3/log"
 )
 
 // Client is a structure to communicate with the template
@@ -15,8 +17,10 @@ type Client struct {
 
 // StoreTree stores the input tree in that ServerIdentity
 func (c *Client) StoreTree(si *network.ServerIdentity, tree *onet.Tree) error {
-	void := &VoidReply{}
-	err := c.SendProtobuf(si, &StoreTreeArg{tree}, void)
+	void := &service.VoidReply{}
+	log.LLvl1("1")
+	err := c.SendProtobuf(si, &service.StoreTreeArg{Tree: tree}, void)
+	log.LLvl1("2")
 	if err != nil {
 		return err
 	}
@@ -31,9 +35,11 @@ func (c *Client) Setup(servers []*onet.Server, translations map[onet.TreeID][]by
 	for _, server := range servers {
 		serverIDS = append(serverIDS, server.ServerIdentity)
 	}
-	void := &VoidReply{}
+	void := &service.VoidReply{}
 	for _, si := range serverIDS {
-		err := c.SendProtobuf(si, &SetupArgs{localityTrees, serverIDS, translations}, void)
+		err := c.SendProtobuf(si, &service.SetupArgs{
+			LocalityTrees: localityTrees, ServerIDS: serverIDS, Translations: translations,
+		}, void)
 		if err != nil {
 			return err
 		}
@@ -43,9 +49,11 @@ func (c *Client) Setup(servers []*onet.Server, translations map[onet.TreeID][]by
 
 // GenesisTx sends a GenesisArgs to every server. It returns an error if there was one for any of the servers.
 func (c *Client) GenesisTx(servers []*onet.Server, id []byte, coinID []byte, receiverPK kyber.Point) error {
-	void := &VoidReply{}
+	void := &service.VoidReply{}
 	for _, server := range servers {
-		err := c.SendProtobuf(server.ServerIdentity, &GenesisArgs{id, coinID, receiverPK}, void)
+		err := c.SendProtobuf(server.ServerIdentity, &service.GenesisArgs{
+			ID: id, CoinID: coinID, ReceiverPK: receiverPK,
+		}, void)
 		if err != nil {
 			return err
 		}
@@ -53,7 +61,17 @@ func (c *Client) GenesisTx(servers []*onet.Server, id []byte, coinID []byte, rec
 	return nil
 }
 
+// TreesBLSCoSi sends a CoSiTrees to the specified Server, and returns a CoSiReplyTrees or an eventual error.
+func (c *Client) TreesBLSCoSi(si *network.ServerIdentity, trees []*onet.Tree, message []byte) (*service.CoSiReplyTrees, error) {
+	reply := &service.CoSiReplyTrees{}
+	err := c.SendProtobuf(si, &service.CoSiTrees{Trees: trees, Message: message}, reply)
+	if err != nil {
+		return nil, err
+	}
+	return reply, nil
+}
+
 // NewClient instantiates a new template.Client
 func NewClient() *Client {
-	return &Client{Client: onet.NewClient(cothority.Suite, ServiceName)}
+	return &Client{Client: onet.NewClient(cothority.Suite, service.ServiceName)}
 }

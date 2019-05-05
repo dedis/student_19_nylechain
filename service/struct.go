@@ -1,4 +1,4 @@
-package nylechain
+package service
 
 /*
 This holds the messages used to communicate with the service over the network.

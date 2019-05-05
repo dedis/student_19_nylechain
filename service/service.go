@@ -1,4 +1,4 @@
-package nylechain
+package service
 
 /*
 The service.go defines what to do for each API-call. This part of the service

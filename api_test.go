@@ -1,19 +1,17 @@
 package nylechain
 
 import (
-	//"crypto/sha256"
 	"sync"
 	"testing"
 
-	"github.com/dedis/student_19_nylechain/gentree"
-	"github.com/dedis/student_19_nylechain/transaction"
-	"go.dedis.ch/kyber/v3/util/random"
-	"go.dedis.ch/protobuf"
-
-	"go.dedis.ch/kyber/v3/sign/bls"
-
 	"go.dedis.ch/kyber/v3/pairing"
 
+	"github.com/dedis/protobuf"
+	"github.com/dedis/student_19_nylechain/gentree"
+	"github.com/dedis/student_19_nylechain/service"
+	"github.com/dedis/student_19_nylechain/transaction"
+	"go.dedis.ch/kyber/v3/sign/bls"
+	"go.dedis.ch/kyber/v3/util/random"
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/log"
 )
@@ -24,71 +22,34 @@ func TestMain(m *testing.M) {
 	log.MainTest(m)
 }
 
-/*func TestGenerateSubTrees(t *testing.T) {
-	local := onet.NewTCPTest(testSuite)
-	_, roster, _ := local.GenTree(20, true)
-	defer local.CloseAll()
-	subTreeReply, err := GenerateSubTrees(&SubTreeArgs{
-		Roster:       roster,
-		BF:           2,
-		SubTreeCount: 3,
-	})
-	require.Nil(t, err)
-	size := 0
-	for _, tree := range subTreeReply.Trees {
-		bool := size < tree.Size()
-		require.True(t, bool)
-		size = tree.Size()
-	}
-
-	subTreeReply, err = GenerateSubTrees(&SubTreeArgs{
-		Roster:       roster,
-		BF:           4,
-		SubTreeCount: 1,
-	})
-	require.Nil(t, err)
-	size = 0
-	for _, tree := range subTreeReply.Trees {
-		bool := size < tree.Size()
-		require.True(t, bool)
-		size = tree.Size()
-	}
-}*/
-func TestTreesBLSCoSi(t *testing.T) {
+func TestClientTreesBLSCoSi(t *testing.T) {
 	local := onet.NewTCPTest(testSuite)
 	servers, roster, _ := local.GenTree(45, true)
-	mapOfServers := make(map[string]*onet.Server)
 	lc := gentree.LocalityContext{}
 	lc.Setup(roster, "nodeGen/nodes.txt")
 	defer local.CloseAll()
+
+	c := NewClient()
 
 	// Translating the trees into sets
 
 	var fullTreeSlice []*onet.Tree
 
-	for _, server := range servers {
-		mapOfServers[server.ServerIdentity.String()] = server
-	}
-
 	for _, trees := range lc.LocalityTrees {
 		for _, tree := range trees[1:] {
 			fullTreeSlice = append(fullTreeSlice, tree)
-			for _, serverIdentity := range tree.Roster.List {
-				service := mapOfServers[serverIdentity.String()].Service(ServiceName).(*Service)
-				service.StoreTree(&StoreTreeArg{Tree: tree})
+			for _, si := range tree.Roster.List {
+				err := c.StoreTree(si, tree)
+				log.ErrFatal(err)
 			}
 		}
 	}
 
-	translations := TreesToSetsOfNodes(fullTreeSlice, roster.List)
-	for _, server := range servers {
-		service := server.Service(ServiceName).(*Service)
-		service.Setup(&SetupArgs{
-			LocalityTrees: lc.LocalityTrees,
-			ServerIDS:     roster.List,
-			Translations:  translations,
-		})
-	}
+	translations := service.TreesToSetsOfNodes(fullTreeSlice, roster.List)
+	err := c.Setup(servers, translations, lc.LocalityTrees)
+	log.ErrFatal(err)
+
+	// Genesis of 2 different coins
 
 	PrivK0, PubK0 := bls.NewKeyPair(testSuite, random.New())
 	_, PubK1 := bls.NewKeyPair(testSuite, random.New())
@@ -97,6 +58,11 @@ func TestTreesBLSCoSi(t *testing.T) {
 	iD1 := []byte("Genesis1")
 	coinID := []byte("0")
 	coinID1 := []byte("1")
+
+	err = c.GenesisTx(servers, iD0, coinID, PubK0)
+	log.ErrFatal(err)
+	err = c.GenesisTx(servers, iD1, coinID1, PubK0)
+	log.ErrFatal(err)
 
 	// First transaction
 	inner := transaction.InnerTx{
@@ -164,20 +130,6 @@ func TestTreesBLSCoSi(t *testing.T) {
 	}
 	txEncodedAlt, _ := protobuf.Encode(&txAlt)*/
 
-	for _, server := range servers {
-		service := server.Service(ServiceName).(*Service)
-		service.GenesisTx(&GenesisArgs{
-			ID:         iD0,
-			CoinID:     coinID,
-			ReceiverPK: PubK0,
-		})
-		service.GenesisTx(&GenesisArgs{
-			ID:         iD1,
-			CoinID:     coinID1,
-			ReceiverPK: PubK0,
-		})
-	}
-
 	var wg sync.WaitGroup
 	n := len(servers[:5])
 	wg.Add(n)
@@ -190,15 +142,11 @@ func TestTreesBLSCoSi(t *testing.T) {
 			}
 			if len(trees) > 0 {
 				// First valid Tx
-				service := server.Service(ServiceName).(*Service)
 				/*var w sync.WaitGroup
 				w.Add(1)
 				var err0 error
 				go func() {*/
-				service.TreesBLSCoSi(&CoSiTrees{
-					Trees:   trees,
-					Message: txEncoded,
-				})
+				c.TreesBLSCoSi(server.ServerIdentity, trees, txEncoded)
 				/*
 						w.Done()
 					}()
@@ -228,51 +176,5 @@ func TestTreesBLSCoSi(t *testing.T) {
 	}
 
 	wg.Wait()
-
-	/*
-
-
-		// We do a loop for each treeID. We first get the latest Tx in the second bucket by usinge the right TreeID and coinID,
-		// then use that value to get the TxStorage in the first one. We then check that the stored senderPK is the right one.
-		for i := 0; i < 9; i++ {
-			services[i].(*Service).db.View(func(bboltTx *bbolt.Tx) error {
-				b := bboltTx.Bucket(services[i].(*Service).bucketNameLastTx)
-				v := b.Get(append([]byte(subTreeReply.IDs[2].String()), coinID...))
-				b = bboltTx.Bucket(services[i].(*Service).bucketNameTx)
-				v = b.Get(v)
-				txStorage := TxStorage{}
-				protobuf.Decode(v, &txStorage)
-				require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK1))
-
-				return nil
-			})
-		}
-
-		for i := 0; i < 7; i++ {
-			services[i].(*Service).db.View(func(bboltTx *bbolt.Tx) error {
-				b := bboltTx.Bucket(services[i].(*Service).bucketNameLastTx)
-				v := b.Get(append([]byte(subTreeReply.IDs[1].String()), coinID...))
-				b = bboltTx.Bucket(services[i].(*Service).bucketNameTx)
-				v = b.Get(v)
-				txStorage := TxStorage{}
-				protobuf.Decode(v, &txStorage)
-				require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK1))
-
-				return nil
-			})
-		}
-
-		for i := 0; i < 3; i++ {
-			services[i].(*Service).db.View(func(bboltTx *bbolt.Tx) error {
-				b := bboltTx.Bucket(services[i].(*Service).bucketNameLastTx)
-				v := b.Get(append([]byte(subTreeReply.IDs[0].String()), coinID...))
-				b = bboltTx.Bucket(services[i].(*Service).bucketNameTx)
-				v = b.Get(v)
-				txStorage := TxStorage{}
-				protobuf.Decode(v, &txStorage)
-				require.True(t, txStorage.Tx.Inner.SenderPK.Equal(PubK1))
-				return nil
-			})
-		}*/
 
 }
