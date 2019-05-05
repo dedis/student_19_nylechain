@@ -146,7 +146,11 @@ func TreesToSetsOfNodes(trees []*onet.Tree, orderedSlice []*network.ServerIdenti
 				}
 			}
 		}
-		result[tree.ID] = set
+		// We hash "set"
+		sha := sha256.New()
+		sha.Write(set)
+		h := sha.Sum(nil)
+		result[tree.ID] = h
 	}
 	return result
 }
@@ -172,17 +176,17 @@ func (s *Service) NewProtocol(n *onet.TreeNodeInstance, conf *onet.GenericConfig
 	}
 }
 
+// StoreTree stores the input tree keyed on its ID.
+func (s *Service) StoreTree(arg *StoreTreeArg) (*VoidReply, error) {
+	s.trees[arg.Tree.ID] = arg.Tree
+	return &VoidReply{}, nil
+}
+
 // Setup stores localityTrees, the ordered slice of Server Identities and the translations from Trees to Sets of nodes.
 func (s *Service) Setup(args *SetupArgs) (*VoidReply, error) {
 	s.localityTrees = args.LocalityTrees
 	s.orderedServerIdentities = args.ServerIDS
 	s.treeIDSToSets = args.Translations
-	return &VoidReply{}, nil
-}
-
-// StoreTree stores the input tree keyed on its ID.
-func (s *Service) StoreTree(arg *StoreTreeArg) (*VoidReply, error) {
-	s.trees[arg.Tree.ID] = arg.Tree
 	return &VoidReply{}, nil
 }
 
@@ -229,26 +233,27 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 		return nil, err
 	}
 	// We send the initialization on the entire roster before sending signatures
-	fullTree := args.Trees[len(args.Trees)-1]
+	n := len(args.TreeIDs)
+	fullTreeID := args.TreeIDs[n-1]
 	data := PropagateData{Tx: tx}
 
 	// Propagate over the last tree which is the "complete" one
-	err = s.startPropagation(s.propagateF, fullTree, &data)
+	err = s.startPropagation(s.propagateF, s.trees[fullTreeID], &data)
 	if err != nil {
 		return nil, err
 	}
 
 	var wg sync.WaitGroup
-	n := len(args.Trees)
 	wg.Add(n)
 	treeIDS := make([]onet.TreeID, n)
 	signatures := make([][]byte, n)
 	var problem error
-	for i, tree := range args.Trees {
-		err := s.vf(args.Message, tree.ID)
+	for i, treeID := range args.TreeIDs {
+		err := s.vf(args.Message, treeID)
 		if err != nil {
 			return nil, err
 		}
+		tree := s.trees[treeID]
 		go func(i int, tree *onet.Tree) {
 			defer wg.Done()
 			pi, _ := s.CreateProtocol(protoName, tree)

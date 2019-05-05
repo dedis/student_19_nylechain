@@ -50,7 +50,7 @@ type PropagateData struct {
 
 // CoSiTrees contains multiple trees and the encoded Tx.
 type CoSiTrees struct {
-	Trees   []*onet.Tree
+	TreeIDs   []onet.TreeID
 	Message []byte
 }
 

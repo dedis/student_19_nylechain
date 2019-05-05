@@ -185,7 +185,9 @@ func TestTreesBLSCoSi(t *testing.T) {
 		go func(server *onet.Server) {
 			// I exclude the first tree of every slice since it only contains one node
 			trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)][1:]
+			var treeIDs []onet.TreeID
 			for _, tree := range trees {
+				treeIDs = append(treeIDs, tree.ID)
 				log.LLvl1(tree.Roster.List)
 			}
 			if len(trees) > 0 {
@@ -196,7 +198,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 				var err0 error
 				go func() {*/
 				service.TreesBLSCoSi(&CoSiTrees{
-					Trees:   trees,
+					TreeIDs: treeIDs,
 					Message: txEncoded,
 				})
 				/*
@@ -204,7 +206,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 					}()
 					// Double spending attempt
 					_, err := service.TreesBLSCoSi(&CoSiTrees{
-						Trees:   trees,
+						TreeIDs:   treeIDs,
 						Message: txEncodedAlt,
 					})
 					w.Wait()
@@ -216,7 +218,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 
 					// Second valid Tx
 					_, err = service.TreesBLSCoSi(&CoSiTrees{
-						Trees:   trees,
+						TreeIDs:   treeIDs,
 						Message: txEncoded02,
 					})*/
 				//log.LLvl1(err)

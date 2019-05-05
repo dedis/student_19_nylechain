@@ -18,7 +18,6 @@ type Client struct {
 // StoreTree stores the input tree in that ServerIdentity
 func (c *Client) StoreTree(si *network.ServerIdentity, tree *onet.Tree) error {
 	void := &service.VoidReply{}
-	log.LLvl1("1")
 	err := c.SendProtobuf(si, &service.StoreTreeArg{Tree: tree}, void)
 	log.LLvl1("2")
 	if err != nil {
