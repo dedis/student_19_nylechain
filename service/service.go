@@ -48,8 +48,6 @@ type Service struct {
 	// are correctly handled.
 	*onet.ServiceProcessor
 
-	localityTrees map[string][]*onet.Tree
-
 	// Complete list of the Server Identities
 	orderedServerIdentities []*network.ServerIdentity
 
@@ -184,7 +182,6 @@ func (s *Service) StoreTree(arg *StoreTreeArg) (*VoidReply, error) {
 
 // Setup stores localityTrees, the ordered slice of Server Identities and the translations from Trees to Sets of nodes.
 func (s *Service) Setup(args *SetupArgs) (*VoidReply, error) {
-	s.localityTrees = args.LocalityTrees
 	s.orderedServerIdentities = args.ServerIDS
 	s.treeIDSToSets = args.Translations
 	return &VoidReply{}, nil
@@ -230,6 +227,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	tx := transaction.Tx{}
 	err := protobuf.Decode(args.Message, &tx)
 	if err != nil {
+		log.ErrFatal(err)
 		return nil, err
 	}
 	// We send the initialization on the entire roster before sending signatures

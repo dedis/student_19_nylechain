@@ -35,12 +35,17 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 
 	var fullTreeSlice []*onet.Tree
 
+	mapOfServers := make(map[string]*onet.Server)
+	for _, server := range servers {
+		mapOfServers[server.ServerIdentity.String()] = server
+	}
+
 	for _, trees := range lc.LocalityTrees {
 		for _, tree := range trees[1:] {
 			fullTreeSlice = append(fullTreeSlice, tree)
-			for _, si := range tree.Roster.List {
-				err := c.StoreTree(si, tree)
-				log.ErrFatal(err)
+			for _, serverIdentity := range tree.Roster.List {
+				s := mapOfServers[serverIdentity.String()].Service(service.ServiceName).(*service.Service)
+				s.StoreTree(&service.StoreTreeArg{Tree: tree})
 			}
 		}
 	}
@@ -137,7 +142,9 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 		go func(server *onet.Server) {
 			// I exclude the first tree of every slice since it only contains one node
 			trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)][1:]
+			var treeIDs []onet.TreeID
 			for _, tree := range trees {
+				treeIDs = append(treeIDs, tree.ID)
 				log.LLvl1(tree.Roster.List)
 			}
 			if len(trees) > 0 {
@@ -146,7 +153,8 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 				w.Add(1)
 				var err0 error
 				go func() {*/
-				c.TreesBLSCoSi(server.ServerIdentity, trees, txEncoded)
+				_, err := c.TreesBLSCoSi(server.ServerIdentity, treeIDs, txEncoded)
+				log.ErrFatal(err)
 				/*
 						w.Done()
 					}()

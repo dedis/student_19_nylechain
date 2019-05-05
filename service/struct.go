@@ -31,7 +31,6 @@ type VoidReply struct{}
 
 // SetupArgs contains the arguments for service method Setup
 type SetupArgs struct {
-	LocalityTrees map[string][]*onet.Tree
 	ServerIDS     []*network.ServerIdentity
 	Translations  map[onet.TreeID][]byte
 }

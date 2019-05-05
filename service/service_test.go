@@ -84,7 +84,6 @@ func TestTreesBLSCoSi(t *testing.T) {
 	for _, server := range servers {
 		service := server.Service(ServiceName).(*Service)
 		service.Setup(&SetupArgs{
-			LocalityTrees: lc.LocalityTrees,
 			ServerIDS:     roster.List,
 			Translations:  translations,
 		})
