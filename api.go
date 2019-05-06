@@ -33,10 +33,11 @@ func (c *Client) Setup(servers []*onet.Server, translations map[onet.TreeID][]by
 		serverIDS = append(serverIDS, server.ServerIdentity)
 	}
 	void := &service.VoidReply{}
+	sArgs := &service.SetupArgs{
+		ServerIDS: serverIDS, Translations: translations,
+	}
 	for _, si := range serverIDS {
-		err := c.SendProtobuf(si, &service.SetupArgs{
-			ServerIDS: serverIDS, Translations: translations,
-		}, void)
+		err := c.SendProtobuf(si, sArgs, void)
 		if err != nil {
 			return err
 		}
