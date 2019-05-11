@@ -46,8 +46,12 @@ func (c *Client) Setup(servers []*onet.Server, translations map[onet.TreeID][]by
 }
 
 // GenesisTx sends a GenesisArgs to every server. It returns an error if there was one for any of the servers.
-func (c *Client) GenesisTx(servers []*onet.Server, id []byte, coinID []byte, receiverPK kyber.Point) error {
+func (c *Client) GenesisTx(servers []*onet.Server, id []byte, coinID []byte, rPK kyber.Point) error {
 	void := &service.VoidReply{}
+	receiverPK, err := rPK.MarshalBinary()
+	if err != nil {
+		return err
+	}
 	gArgs := &service.GenesisArgs{
 		ID: id, CoinID: coinID, ReceiverPK: receiverPK,
 	}

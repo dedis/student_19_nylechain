@@ -56,17 +56,19 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 
 	// Genesis of 2 different coins
 
-	PrivK0, PubK0 := bls.NewKeyPair(testSuite, random.New())
-	_, PubK1 := bls.NewKeyPair(testSuite, random.New())
+	PvK0, PbK0 := bls.NewKeyPair(testSuite, random.New())
+	_, PbK1 := bls.NewKeyPair(testSuite, random.New())
+	PubK0, _ := PbK0.MarshalBinary()
+	PubK1, _ := PbK1.MarshalBinary()
 	//_, PubK2 := bls.NewKeyPair(testSuite, random.New())
 	iD0 := []byte("Genesis0")
 	iD1 := []byte("Genesis1")
 	coinID := []byte("0")
 	coinID1 := []byte("1")
 
-	err = c.GenesisTx(servers, iD0, coinID, PubK0)
+	err = c.GenesisTx(servers, iD0, coinID, PbK0)
 	log.ErrFatal(err)
-	err = c.GenesisTx(servers, iD1, coinID1, PubK0)
+	err = c.GenesisTx(servers, iD1, coinID1, PbK0)
 	log.ErrFatal(err)
 
 	// First transaction
@@ -77,7 +79,7 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 		ReceiverPK: PubK1,
 	}
 	innerEncoded, _ := protobuf.Encode(&inner)
-	signature, _ := bls.Sign(testSuite, PrivK0, innerEncoded)
+	signature, _ := bls.Sign(testSuite, PvK0, innerEncoded)
 	tx := transaction.Tx{
 		Inner:     inner,
 		Signature: signature,
