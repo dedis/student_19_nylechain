@@ -14,20 +14,8 @@ type Client struct {
 	*onet.Client
 }
 
-// StoreTree stores the input tree in that ServerIdentity
-func (c *Client) StoreTree(si *network.ServerIdentity, tree *onet.Tree) error {
-	void := &service.VoidReply{}
-	err := c.SendProtobuf(si, &service.StoreTreeArg{Tree: tree}, void)
-	if err != nil {
-		return err
-	}
-	return nil
-
-}
-
 // Setup sends a SetupArgs to every server. It returns an error if there was one for any of the servers.
-func (c *Client) Setup(servers []*onet.Server, translations map[onet.TreeID][]byte,
-	localityTrees map[string][]*onet.Tree) error {
+func (c *Client) Setup(servers []*onet.Server, translations map[onet.TreeID][]byte) error {
 	var serverIDS []*network.ServerIdentity
 	for _, server := range servers {
 		serverIDS = append(serverIDS, server.ServerIdentity)

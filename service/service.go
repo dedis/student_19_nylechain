@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dedis/student_19_nylechain/gentree"
+
 	"go.dedis.ch/cothority/v3"
 
 	"github.com/dedis/student_19_nylechain/propagate"
@@ -50,11 +52,13 @@ type Service struct {
 	// are correctly handled.
 	*onet.ServiceProcessor
 
+	Lc gentree.LocalityContext
+
 	// Complete list of the Server Identities
 	orderedServerIdentities []*network.ServerIdentity
 
 	// Trees of which this server is a part of, keyed to TreeID
-	trees map[onet.TreeID]*onet.Tree
+	Trees map[onet.TreeID]*onet.Tree
 
 	// Complete list of translation from a Tree to its ordered set
 	treeIDSToSets map[onet.TreeID][]byte
@@ -134,6 +138,7 @@ func (s *Service) vf(msg []byte, id onet.TreeID) error {
 // Tree B has root orderedSlice[1] and children orderedSlice[3], orderedSlice[0].
 // Both will be translated to a same array of bytes : [byte(0), byte(1), byte(3)]
 // We use arrays of bytes because they will be used in bbolt.
+// It should be called once at the start, and the returned map will be one of the arguments of each service's Setup function.
 func TreesToSetsOfNodes(trees []*onet.Tree, orderedSlice []*network.ServerIdentity) map[onet.TreeID][]byte {
 	result := make(map[onet.TreeID][]byte)
 	for _, tree := range trees {
@@ -178,12 +183,6 @@ func (s *Service) NewProtocol(n *onet.TreeNodeInstance, conf *onet.GenericConfig
 	}
 }
 
-// StoreTree stores the input tree keyed on its ID.
-func (s *Service) StoreTree(arg *StoreTreeArg) (*VoidReply, error) {
-	s.trees[arg.Tree.ID] = arg.Tree
-	return &VoidReply{}, nil
-}
-
 // Setup stores localityTrees, the ordered slice of Server Identities and the translations from Trees to Sets of nodes.
 func (s *Service) Setup(args *SetupArgs) (*VoidReply, error) {
 	s.orderedServerIdentities = args.ServerIDS
@@ -208,7 +207,7 @@ func (s *Service) GenesisTx(args *GenesisArgs) (*VoidReply, error) {
 		}
 		// Store as last transaction in the LastTx bucket for every TreeID
 		b = bboltTx.Bucket(s.bucketNameLastTx)
-		for id := range s.trees {
+		for id := range s.Trees {
 			// Initialize the corresponding mutex
 			set := s.treeIDSToSets[id]
 			s.mutexs[string(set)+string(args.CoinID)] = &sync.Mutex{}
@@ -240,7 +239,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	data := PropagateData{Tx: tx}
 
 	// Propagate over the last tree which is the "complete" one
-	err = s.startPropagation(s.propagateF, s.trees[fullTreeID], &data)
+	err = s.startPropagation(s.propagateF, s.Trees[fullTreeID], &data)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +254,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 		if err != nil {
 			return nil, err
 		}
-		tree := s.trees[treeID]
+		tree := s.Trees[treeID]
 		go func(i int, tree *onet.Tree) {
 			defer wg.Done()
 			pi, _ := s.CreateProtocol(protoName, tree)
@@ -343,7 +342,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 
 		// Then check the aggregate signature
 		suite := pairing.NewSuiteBn256()
-		err = bls.Verify(suite, s.trees[data.TreeID].Root.AggregatePublic(suite), txEncoded, data.Signature)
+		err = bls.Verify(suite, s.Trees[data.TreeID].Root.AggregatePublic(suite), txEncoded, data.Signature)
 		if err != nil {
 			return err
 		}
@@ -438,7 +437,7 @@ func newService(c *onet.Context) (onet.Service, error) {
 		return nil, err
 	}
 
-	if err := s.RegisterHandlers(s.GenesisTx, s.Setup, s.StoreTree, s.TreesBLSCoSi); err != nil {
+	if err := s.RegisterHandlers(s.GenesisTx, s.Setup, s.TreesBLSCoSi); err != nil {
 		return nil, errors.New("Couldn't register messages")
 	}
 
@@ -446,7 +445,7 @@ func newService(c *onet.Context) (onet.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.trees = make(map[onet.TreeID]*onet.Tree)
+	s.Trees = make(map[onet.TreeID]*onet.Tree)
 	s.mutexs = make(map[string]*sync.Mutex)
 
 	db, bucketNameTx := s.GetAdditionalBucket([]byte("Tx"))

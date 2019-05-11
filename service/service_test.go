@@ -75,7 +75,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 			fullTreeSlice = append(fullTreeSlice, tree)
 			for _, serverIdentity := range tree.Roster.List {
 				service := mapOfServers[serverIdentity.String()].Service(ServiceName).(*Service)
-				service.StoreTree(&StoreTreeArg{Tree: tree})
+				service.Trees[tree.ID] = tree
 			}
 		}
 	}

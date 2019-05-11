@@ -38,6 +38,7 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 	mapOfServers := make(map[string]*onet.Server)
 	for _, server := range servers {
 		mapOfServers[server.ServerIdentity.String()] = server
+		server.Service(service.ServiceName).(*service.Service).Lc = lc
 	}
 
 	for _, trees := range lc.LocalityTrees {
@@ -45,13 +46,13 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 			fullTreeSlice = append(fullTreeSlice, tree)
 			for _, serverIdentity := range tree.Roster.List {
 				s := mapOfServers[serverIdentity.String()].Service(service.ServiceName).(*service.Service)
-				s.StoreTree(&service.StoreTreeArg{Tree: tree})
+				s.Trees[tree.ID] = tree
 			}
 		}
 	}
 
 	translations := service.TreesToSetsOfNodes(fullTreeSlice, roster.List)
-	err := c.Setup(servers, translations, lc.LocalityTrees)
+	err := c.Setup(servers, translations)
 	log.ErrFatal(err)
 
 	// Genesis of 2 different coins
