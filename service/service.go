@@ -153,13 +153,41 @@ func TreesToSetsOfNodes(trees []*onet.Tree, orderedSlice []*network.ServerIdenti
 				}
 			}
 		}
-		// We hash "set"
-		sha := sha256.New()
-		sha.Write(set)
-		h := sha.Sum(nil)
-		result[tree.ID] = h
+		result[tree.ID] = set
 	}
 	return result
+}
+
+// IsSubSetOfNodes returns if fullID's set is a subset of subID's set of nodes.
+// Since fullSet and subSet both are slices of increasing indexes of nodes, we need to check that every index in subSet is in fullSet.
+// Example : [byte(0), byte(3)] is a subset of [byte(0), byte(1), by byte(3)]
+func (s *Service) IsSubSetOfNodes(fullID onet.TreeID, subID onet.TreeID) (bool, error) {
+	fullSet := s.treeIDSToSets[fullID]
+	subSet := s.treeIDSToSets[subID]
+	if fullSet == nil || subSet == nil {
+		return false, errors.New("TreeID not stored in this service")
+	}
+	fullIndex := 0
+	// We scan both byte slices from left to right, exploiting the fact that the bytes are in increasing order
+	for _, subNode := range subSet {
+		for i := fullIndex;  i < len(fullSet) ; i++ {
+			fullIndex++
+			if fullSet[i] == subNode {
+				// We go the the next subNode
+				break
+			}
+			if fullSet[i] > subNode {
+				// We can immediatly conclude that subNode is not in fullSet
+				return false, nil
+			}
+			if fullIndex == len(fullSet) {
+				// The last node of fullSet wasn't subNode
+				return false, nil
+			}
+		}
+	}
+	// Every node of subSet is in fullSet
+	return true, nil
 }
 
 // NewDefaultProtocol is the default protocol function, with a verification function that checks transactions.
@@ -298,7 +326,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 }
 
 // propagateHandler receives a *PropagateData. It stores the transaction and its aggregate signatures in the "Tx"
-// bucket, and tracks the last transaction for each coin and tree in the "LastTx" bucket.
+// bucket, and tracks the last transaction for each coin and set in the "LastTx" bucket.
 func (s *Service) propagateHandler(msg network.Message) {
 	data := msg.(*PropagateData)
 	txEncoded, err := protobuf.Encode(&data.Tx)
