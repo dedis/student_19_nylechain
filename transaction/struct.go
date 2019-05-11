@@ -1,7 +1,6 @@
 package transaction
 
 import (
-	"go.dedis.ch/kyber/v3"
 	"go.dedis.ch/onet/v3/network"
 )
 
@@ -13,8 +12,8 @@ func init() {
 type InnerTx struct {
 	CoinID     []byte
 	PreviousTx []byte
-	SenderPK   kyber.Point
-	ReceiverPK kyber.Point
+	SenderPK   []byte
+	ReceiverPK []byte
 }
 
 // Tx includes the signature of InnerTx

@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"go.dedis.ch/cothority/v3"
+
 	"github.com/dedis/student_19_nylechain/propagate"
 	"go.dedis.ch/protobuf"
 
@@ -85,7 +87,9 @@ func (s *Service) vf(msg []byte, id onet.TreeID) error {
 	inner, _ := protobuf.Encode(&tx.Inner)
 
 	suite := pairing.NewSuiteBn256()
-	err = bls.Verify(suite, tx.Inner.SenderPK, inner, tx.Signature)
+	senderPK := suite.G2().Point()
+	senderPK.UnmarshalBinary(tx.Inner.SenderPK)
+	err = bls.Verify(suite, senderPK, inner, tx.Signature)
 	if err != nil {
 		return err
 	}
@@ -115,7 +119,7 @@ func (s *Service) vf(msg []byte, id onet.TreeID) error {
 		if err != nil {
 			return err
 		}
-		if !storage.Tx.Inner.ReceiverPK.Equal(tx.Inner.SenderPK) {
+		if bytes.Compare(storage.Tx.Inner.ReceiverPK, tx.Inner.SenderPK) != 0 {
 			return errors.New("Previous transaction's receiver isn't current sender")
 		}
 		return nil
@@ -225,7 +229,7 @@ func (s *Service) GenesisTx(args *GenesisArgs) (*VoidReply, error) {
 // The signatures returned are ordered like the corresponding trees received.
 func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	tx := transaction.Tx{}
-	err := protobuf.Decode(args.Message, &tx)
+	err := protobuf.DecodeWithConstructors(args.Message, &tx, network.DefaultConstructors(cothority.Suite))
 	if err != nil {
 		log.ErrFatal(err)
 		return nil, err

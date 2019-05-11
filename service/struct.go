@@ -6,7 +6,6 @@ This holds the messages used to communicate with the service over the network.
 
 import (
 	"github.com/dedis/student_19_nylechain/transaction"
-	"go.dedis.ch/kyber/v3"
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/network"
 )
@@ -31,8 +30,8 @@ type VoidReply struct{}
 
 // SetupArgs contains the arguments for service method Setup
 type SetupArgs struct {
-	ServerIDS     []*network.ServerIdentity
-	Translations  map[onet.TreeID][]byte
+	ServerIDS    []*network.ServerIdentity
+	Translations map[onet.TreeID][]byte
 }
 
 // StoreTreeArg contains the argument for service method StoreTree
@@ -49,7 +48,7 @@ type PropagateData struct {
 
 // CoSiTrees contains multiple trees and the encoded Tx.
 type CoSiTrees struct {
-	TreeIDs   []onet.TreeID
+	TreeIDs []onet.TreeID
 	Message []byte
 }
 
@@ -78,7 +77,7 @@ type SubTreeReply struct {
 type GenesisArgs struct {
 	ID         []byte
 	CoinID     []byte
-	ReceiverPK kyber.Point
+	ReceiverPK []byte
 }
 
 // TxStorage is what is stored in boltdb's main bucket. It contains the transaction and its aggregate signatures
