@@ -139,9 +139,9 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 	txEncodedAlt, _ := protobuf.Encode(&txAlt)*/
 
 	var wg sync.WaitGroup
-	n := len(servers[:5])
+	n := len(servers[:3])
 	wg.Add(n)
-	for _, server := range servers[:5] {
+	for _, server := range servers[:3] {
 		go func(server *onet.Server) {
 			// I exclude the first tree of every slice since it only contains one node
 			trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)][1:]

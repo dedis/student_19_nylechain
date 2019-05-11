@@ -158,7 +158,7 @@ func TreesToSetsOfNodes(trees []*onet.Tree, orderedSlice []*network.ServerIdenti
 	return result
 }
 
-// IsSubSetOfNodes returns if fullID's set is a subset of subID's set of nodes.
+// IsSubSetOfNodes returns if fullID's set is a strict subset of subID's set of nodes.
 // Since fullSet and subSet both are slices of increasing indexes of nodes, we need to check that every index in subSet is in fullSet.
 // Example : [byte(0), byte(3)] is a subset of [byte(0), byte(1), by byte(3)]
 func (s *Service) IsSubSetOfNodes(fullID onet.TreeID, subID onet.TreeID) (bool, error) {
@@ -167,10 +167,17 @@ func (s *Service) IsSubSetOfNodes(fullID onet.TreeID, subID onet.TreeID) (bool, 
 	if fullSet == nil || subSet == nil {
 		return false, errors.New("TreeID not stored in this service")
 	}
+	if bytes.Equal(fullSet, subSet) {
+		return false, nil
+	}
 	fullIndex := 0
 	// We scan both byte slices from left to right, exploiting the fact that the bytes are in increasing order
 	for _, subNode := range subSet {
-		for i := fullIndex;  i < len(fullSet) ; i++ {
+		if fullIndex == len(fullSet) {
+			// We already scanned the entire fullSet
+			return false, nil
+		}
+		for i := fullIndex; i < len(fullSet); i++ {
 			fullIndex++
 			if fullSet[i] == subNode {
 				// We go the the next subNode
@@ -392,8 +399,25 @@ func (s *Service) propagateHandler(msg network.Message) {
 		}
 		// Update LastTx bucket too
 		b = bboltTx.Bucket(s.bucketNameLastTx)
+		// Register as LastTx for this tree's set
 		err = b.Put(append(set, data.Tx.Inner.CoinID...), h)
-		return err
+		if err != nil {
+			return err
+		}
+		// Register as LastTx for every subset of this tree's set
+		for id := range s.Trees {
+			isSubset, err := s.IsSubSetOfNodes(data.TreeID, id)
+			if err != nil {
+				return err
+			}
+			if isSubset {
+				err = b.Put(append(s.treeIDSToSets[id], data.Tx.Inner.CoinID...), h)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		log.Error(err)
