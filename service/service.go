@@ -158,7 +158,7 @@ func TreesToSetsOfNodes(trees []*onet.Tree, orderedSlice []*network.ServerIdenti
 	return result
 }
 
-// IsSubSetOfNodes returns if fullID's set is a strict subset of subID's set of nodes.
+// IsSubSetOfNodes returns if subID's set is a strict subset of fullID's set of nodes.
 // Since fullSet and subSet both are slices of increasing indexes of nodes, we need to check that every index in subSet is in fullSet.
 // Example : [byte(0), byte(3)] is a subset of [byte(0), byte(1), by byte(3)]
 func (s *Service) IsSubSetOfNodes(fullID onet.TreeID, subID onet.TreeID) (bool, error) {

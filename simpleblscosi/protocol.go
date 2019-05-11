@@ -146,15 +146,6 @@ func (c *SimpleBLSCoSi) Start() error {
 // handlePrepare will pass the message to the round and send back the
 // output. If in == nil, we are root and we start the round.
 func (c *SimpleBLSCoSi) handlePrepare(in *SimplePrepare) error {
-
-	tx := transaction.Tx{}
-	err := protobuf.Decode(in.Message, &tx)
-	if err != nil {
-		return err
-	}
-	key := string(c.set) + string(tx.Inner.CoinID)
-	c.mutexs[key].Lock()
-
 	c.Message = in.Message
 	log.Lvlf3("%s prepare message: %x", c.ServerIdentity(), c.Message)
 
@@ -207,11 +198,18 @@ func (c *SimpleBLSCoSi) handlePrepareReplies(replies []*SimplePrepareReply) erro
 // handleCommit dispatch the commit to the round and then dispatch the
 // results down the tree.
 func (c *SimpleBLSCoSi) handleCommit(in *SimpleCommit) error {
+	tx := transaction.Tx{}
+	err := protobuf.Decode(c.Message, &tx)
+	if err != nil {
+		return err
+	}
+	key := string(c.set) + string(tx.Inner.CoinID)
+	c.mutexs[key].Lock()
 	log.Lvlf3("%s handling commit", c.ServerIdentity())
 
 	// check that the commit is correct with respect to the aggregate key
 	pk := bls.AggregatePublicKeys(c.suite, c.Publics()...)
-	err := bls.Verify(c.suite, pk, c.Message, in.AggrSig)
+	err = bls.Verify(c.suite, pk, c.Message, in.AggrSig)
 	if err != nil {
 		log.Error(c.ServerIdentity(), "commit verification failed with error: ", err.Error())
 		return err
