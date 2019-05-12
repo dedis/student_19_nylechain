@@ -37,11 +37,8 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 
 	var fullTreeSlice []*onet.Tree
 	var serverIDS []*network.ServerIdentity
-
-	mapOfServers := make(map[string]*onet.Server)
 	for _, server := range servers {
 		serverIDS = append(serverIDS, server.ServerIdentity)
-		mapOfServers[server.ServerIdentity.String()] = server
 		server.Service(service.ServiceName).(*service.Service).Lc = lc
 	}
 
@@ -49,8 +46,7 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 		for _, tree := range trees[1:] {
 			fullTreeSlice = append(fullTreeSlice, tree)
 			for _, serverIdentity := range tree.Roster.List {
-				s := mapOfServers[serverIdentity.String()].Service(service.ServiceName).(*service.Service)
-				s.Trees[tree.ID] = tree
+				c.StoreTree(serverIdentity, tree)
 			}
 		}
 	}

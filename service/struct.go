@@ -36,7 +36,8 @@ type SetupArgs struct {
 
 // StoreTreeArg contains the argument for service method StoreTree
 type StoreTreeArg struct {
-	Tree *onet.Tree
+	MarshalledTree []byte
+	Roster *onet.Roster
 }
 
 // PropagateData is what is received by propagateHandler. It's propagated by TreesBLSCoSi.

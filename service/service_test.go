@@ -1,7 +1,7 @@
 package service
 
 import (
-	//"crypto/sha256"
+	_ "crypto/sha256"
 	"sync"
 	"testing"
 
@@ -75,7 +75,11 @@ func TestTreesBLSCoSi(t *testing.T) {
 			fullTreeSlice = append(fullTreeSlice, tree)
 			for _, serverIdentity := range tree.Roster.List {
 				service := mapOfServers[serverIdentity.String()].Service(ServiceName).(*Service)
-				service.Trees[tree.ID] = tree
+				marshalledTree, _ := tree.Marshal()
+				service.StoreTree(&StoreTreeArg{
+					MarshalledTree: marshalledTree,
+					Roster:         tree.Roster,
+				})
 			}
 		}
 	}
@@ -84,8 +88,8 @@ func TestTreesBLSCoSi(t *testing.T) {
 	for _, server := range servers {
 		service := server.Service(ServiceName).(*Service)
 		service.Setup(&SetupArgs{
-			ServerIDS:     roster.List,
-			Translations:  translations,
+			ServerIDS:    roster.List,
+			Translations: translations,
 		})
 	}
 
