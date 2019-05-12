@@ -15,11 +15,7 @@ type Client struct {
 }
 
 // Setup sends a SetupArgs to every server. It returns an error if there was one for any of the servers.
-func (c *Client) Setup(servers []*onet.Server, translations map[onet.TreeID][]byte) error {
-	var serverIDS []*network.ServerIdentity
-	for _, server := range servers {
-		serverIDS = append(serverIDS, server.ServerIdentity)
-	}
+func (c *Client) Setup(serverIDS []*network.ServerIdentity, translations map[onet.TreeID][]byte) error {
 	void := &service.VoidReply{}
 	sArgs := &service.SetupArgs{
 		ServerIDS: serverIDS, Translations: translations,
@@ -34,7 +30,7 @@ func (c *Client) Setup(servers []*onet.Server, translations map[onet.TreeID][]by
 }
 
 // GenesisTx sends a GenesisArgs to every server. It returns an error if there was one for any of the servers.
-func (c *Client) GenesisTx(servers []*onet.Server, id []byte, coinID []byte, rPK kyber.Point) error {
+func (c *Client) GenesisTx(serverIDS []*network.ServerIdentity, id []byte, coinID []byte, rPK kyber.Point) error {
 	void := &service.VoidReply{}
 	receiverPK, err := rPK.MarshalBinary()
 	if err != nil {
@@ -43,8 +39,8 @@ func (c *Client) GenesisTx(servers []*onet.Server, id []byte, coinID []byte, rPK
 	gArgs := &service.GenesisArgs{
 		ID: id, CoinID: coinID, ReceiverPK: receiverPK,
 	}
-	for _, server := range servers {
-		err := c.SendProtobuf(server.ServerIdentity, gArgs, void)
+	for _, serverID := range serverIDS {
+		err := c.SendProtobuf(serverID, gArgs, void)
 		if err != nil {
 			return err
 		}

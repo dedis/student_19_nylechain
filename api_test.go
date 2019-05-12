@@ -4,6 +4,8 @@ import (
 	"sync"
 	"testing"
 
+	"go.dedis.ch/onet/v3/network"
+
 	"go.dedis.ch/kyber/v3/pairing"
 
 	"github.com/dedis/protobuf"
@@ -34,9 +36,11 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 	// Translating the trees into sets
 
 	var fullTreeSlice []*onet.Tree
+	var serverIDS []*network.ServerIdentity
 
 	mapOfServers := make(map[string]*onet.Server)
 	for _, server := range servers {
+		serverIDS = append(serverIDS, server.ServerIdentity)
 		mapOfServers[server.ServerIdentity.String()] = server
 		server.Service(service.ServiceName).(*service.Service).Lc = lc
 	}
@@ -52,7 +56,7 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 	}
 
 	translations := service.TreesToSetsOfNodes(fullTreeSlice, roster.List)
-	err := c.Setup(servers, translations)
+	err := c.Setup(serverIDS, translations)
 	log.ErrFatal(err)
 
 	// Genesis of 2 different coins
@@ -67,9 +71,9 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 	coinID := []byte("0")
 	coinID1 := []byte("1")
 
-	err = c.GenesisTx(servers, iD0, coinID, PbK0)
+	err = c.GenesisTx(serverIDS, iD0, coinID, PbK0)
 	log.ErrFatal(err)
-	err = c.GenesisTx(servers, iD1, coinID1, PbK0)
+	err = c.GenesisTx(serverIDS, iD1, coinID1, PbK0)
 	log.ErrFatal(err)
 
 	// First transaction
