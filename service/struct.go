@@ -34,7 +34,7 @@ type SetupArgs struct {
 	Translations map[onet.TreeID][]byte
 }
 
-// StoreTreeArg contains the argument for service method StoreTree
+// StoreTreeArg contains the arguments for service method StoreTree
 type StoreTreeArg struct {
 	MarshalledTree []byte
 	Roster *onet.Roster

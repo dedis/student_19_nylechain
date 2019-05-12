@@ -178,6 +178,8 @@ func (s *Service) Test(config *onet.SimulationConfig) {
 
 func (s *LocalityContext) initializeServerToNodeMap(roster *onet.Roster) {
 	if len(roster.List) != len(s.Nodes.All) {
+		log.LLvl1(len(roster.List))
+		log.LLvl1(len(s.Nodes.All))
 		log.Panic("Roster has different length than the nr of nodes read from the file")
 	}
 

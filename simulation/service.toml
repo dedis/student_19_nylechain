@@ -1,10 +1,9 @@
 Simulation = "NylechainService"
-Servers = 8
-Bf = 4
+Servers = 45
+Bf = 2
 Rounds = 1
 CloseWait = 6000
 Suite = "Ed25519"
 
 Depth
-1
-2
+5
