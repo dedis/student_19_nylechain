@@ -229,7 +229,7 @@ func (s *Service) StoreTree(arg *StoreTreeArg) (*VoidReply, error) {
 	return &VoidReply{}, nil
 }
 
-// Setup stores localityTrees, the ordered slice of Server Identities and the translations from Trees to Sets of nodes.
+// Setup stores the ordered slice of Server Identities and the translations from Trees to Sets of nodes.
 func (s *Service) Setup(args *SetupArgs) (*VoidReply, error) {
 	s.orderedServerIdentities = args.ServerIDS
 	s.treeIDSToSets = args.Translations
