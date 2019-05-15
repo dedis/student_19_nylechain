@@ -1,6 +1,7 @@
 package nylechain
 
 import (
+	_ "go.dedis.ch/onet/v3/log"
 	"github.com/dedis/student_19_nylechain/service"
 	"go.dedis.ch/cothority/v3"
 	"go.dedis.ch/kyber/v3"

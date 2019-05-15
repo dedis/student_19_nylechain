@@ -416,7 +416,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 			return err
 		}
 		// Register as LastTx for every subset of this tree's set
-		for id := range s.trees {
+		/*for id := range s.trees {
 			isSubset, err := s.IsSubSetOfNodes(data.TreeID, id)
 			if err != nil {
 				return err
@@ -427,7 +427,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 					return err
 				}
 			}
-		}
+		}*/
 		return nil
 	})
 	if err != nil {

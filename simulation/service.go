@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/dedis/protobuf"
+	"github.com/dedis/student_19_nylechain/transaction"
 	"github.com/BurntSushi/toml"
 	nylechain "github.com/dedis/student_19_nylechain"
 	"github.com/dedis/student_19_nylechain/gentree"
@@ -47,40 +49,6 @@ func (s *SimulationService) Setup(dir string, hosts []string) (
 		return nil, err
 	}
 
-	c := nylechain.NewClient()
-
-	var fullTreeSlice []*onet.Tree
-	serverIDS := sc.Roster.List
-	lc := gentree.LocalityContext{}
-	lc.Setup(sc.Roster, "../nodeGen/nodes.txt")
-
-	for _, trees := range lc.LocalityTrees {
-		for _, tree := range trees[1:] {
-			fullTreeSlice = append(fullTreeSlice, tree)
-			for _, serverIdentity := range tree.Roster.List {
-				c.StoreTree(serverIdentity, tree)
-			}
-		}
-	}
-
-	translations := service.TreesToSetsOfNodes(fullTreeSlice, sc.Roster.List)
-	err = c.Setup(serverIDS, translations)
-	log.ErrFatal(err)
-
-	// Genesis of 2 different coins
-	suite := pairing.NewSuiteBn256()
-	_, PbK0 := bls.NewKeyPair(suite, random.New())
-	//_, PubK2 := bls.NewKeyPair(testSuite, random.New())
-	iD0 := []byte("Genesis0")
-	iD1 := []byte("Genesis1")
-	coinID := []byte("0")
-	coinID1 := []byte("1")
-
-	err = c.GenesisTx(serverIDS, iD0, coinID, PbK0)
-	log.ErrFatal(err)
-	err = c.GenesisTx(serverIDS, iD1, coinID1, PbK0)
-	log.ErrFatal(err)
-
 	return sc, nil
 }
 
@@ -100,19 +68,66 @@ func (s *SimulationService) Node(config *onet.SimulationConfig) error {
 // Run is used on the destination machines and runs a number of
 // rounds
 func (s *SimulationService) Run(config *onet.SimulationConfig) error {
-	/*size := config.Tree.Size()
+	size := config.Tree.Size()
 	log.Lvl2("Size is:", size, "rounds:", s.Rounds)
+	
 	c := nylechain.NewClient()
-	for round := 0; round < s.Rounds; round++ {
-		log.Lvl1("Starting round", round)
-		round := monitor.NewTimeMeasure("round")
-		resp, err :=
 
-			log.ErrFatal(err)
-		if resp.Time <= 0 {
-			log.Fatal("0 time elapsed")
+	var fullTreeSlice []*onet.Tree
+	serverIDS := config.Roster.List
+	lc := gentree.LocalityContext{}
+	lc.Setup(config.Roster, "../../nodeGen/nodes.txt")
+
+	for _, trees := range lc.LocalityTrees {
+		for _, tree := range trees[1:] {
+			fullTreeSlice = append(fullTreeSlice, tree)
+			for _, serverIdentity := range tree.Roster.List {
+				c.StoreTree(serverIdentity, tree)
+			}
 		}
-		round.Record()
-	}*/
+	}
+
+	translations := service.TreesToSetsOfNodes(fullTreeSlice, config.Roster.List)
+	err := c.Setup(serverIDS, translations)
+	log.ErrFatal(err)
+
+	// Genesis of 2 different coins
+	suite := pairing.NewSuiteBn256()
+	PvK0, PbK0 := bls.NewKeyPair(suite, random.New())
+	_, PbK1 := bls.NewKeyPair(suite, random.New())
+	//_, PubK2 := bls.NewKeyPair(testSuite, random.New())
+	PubK0, _ := PbK0.MarshalBinary()
+	PubK1, _ := PbK1.MarshalBinary()
+	iD0 := []byte("Genesis0")
+	iD1 := []byte("Genesis1")
+	coinID := []byte("0")
+	coinID1 := []byte("1")
+
+	err = c.GenesisTx(serverIDS, iD0, coinID, PbK0)
+	log.ErrFatal(err)
+	err = c.GenesisTx(serverIDS, iD1, coinID1, PbK0)
+	log.ErrFatal(err)
+
+	// First transaction
+	inner := transaction.InnerTx{
+		CoinID:     coinID,
+		PreviousTx: iD0,
+		SenderPK:   PubK0,
+		ReceiverPK: PubK1,
+	}
+	innerEncoded, _ := protobuf.Encode(&inner)
+	signature, _ := bls.Sign(suite, PvK0, innerEncoded)
+	tx := transaction.Tx{
+		Inner:     inner,
+		Signature: signature,
+	}
+	txEncoded, _ := protobuf.Encode(&tx)
+
+	treeIDs := make([]onet.TreeID, 1)
+	treeIDs[0] = lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(serverIDS[0])][1].ID
+	reply, err0 := c.TreesBLSCoSi(serverIDS[0], treeIDs, txEncoded)
+	log.ErrFatal(err0)
+	log.LLvl1(reply)
+
 	return nil
 }

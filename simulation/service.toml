@@ -1,9 +1,9 @@
 Simulation = "NylechainService"
 Servers = 45
-Bf = 1
+Bf = 44
 Rounds = 1
 CloseWait = 6000
-Suite = "Ed25519"
+Suite = "bn256.adapter"
 
 Depth
-44
+1
