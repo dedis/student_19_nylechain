@@ -73,14 +73,6 @@ func TestTreesBLSCoSi(t *testing.T) {
 	for _, trees := range lc.LocalityTrees {
 		for _, tree := range trees[1:] {
 			fullTreeSlice = append(fullTreeSlice, tree)
-			for _, serverIdentity := range tree.Roster.List {
-				service := mapOfServers[serverIdentity.String()].Service(ServiceName).(*Service)
-				marshalledTree, _ := tree.Marshal()
-				service.StoreTree(&StoreTreeArg{
-					MarshalledTree: marshalledTree,
-					Roster:         tree.Roster,
-				})
-			}
 		}
 	}
 
@@ -88,7 +80,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 	for _, server := range servers {
 		service := server.Service(ServiceName).(*Service)
 		service.Setup(&SetupArgs{
-			Roster:    roster,
+			Roster:       roster,
 			Translations: translations,
 		})
 	}

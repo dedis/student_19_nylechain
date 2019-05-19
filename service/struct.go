@@ -16,7 +16,7 @@ func init() {
 		CoSiTrees{}, CoSiReplyTrees{},
 		TxStorage{}, PropagateData{},
 		GenesisArgs{}, SetupArgs{},
-		StoreTreeArg{}, VoidReply{},
+		VoidReply{},
 	)
 }
 
@@ -30,14 +30,8 @@ type VoidReply struct{}
 
 // SetupArgs contains the arguments for service method Setup
 type SetupArgs struct {
-	Roster *onet.Roster
+	Roster       *onet.Roster
 	Translations map[onet.TreeID][]byte
-}
-
-// StoreTreeArg contains the arguments for service method StoreTree
-type StoreTreeArg struct {
-	MarshalledTree []byte
-	Roster *onet.Roster
 }
 
 // PropagateData is what is received by propagateHandler. It's propagated by TreesBLSCoSi.

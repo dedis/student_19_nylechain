@@ -218,17 +218,6 @@ func (s *Service) NewProtocol(n *onet.TreeNodeInstance, conf *onet.GenericConfig
 	}
 }
 
-// StoreTree stores the input tree keyed on its ID.
-func (s *Service) StoreTree(arg *StoreTreeArg) (*VoidReply, error) {
-	suite := pairing.NewSuiteBn256()
-	tree, err := onet.NewTreeFromMarshal(suite, arg.MarshalledTree, arg.Roster)
-	if err != nil {
-		return &VoidReply{}, err
-	}
-	s.trees[tree.ID] = tree
-	return &VoidReply{}, nil
-}
-
 // Setup stores the ordered slice of Server Identities and the translations from Trees to Sets of nodes.
 func (s *Service) Setup(args *SetupArgs) (*VoidReply, error) {
 	lc := gentree.LocalityContext{}
@@ -237,7 +226,7 @@ func (s *Service) Setup(args *SetupArgs) (*VoidReply, error) {
 	for _, trees := range lc.LocalityTrees {
 		for _, tree := range trees[1:] {
 			for _, si := range tree.Roster.List {
-				if si == s.ServerIdentity() {
+				if si.Equal(s.ServerIdentity()) {
 					s.trees[tree.ID] = tree
 				}
 			}
@@ -513,7 +502,7 @@ func newService(c *onet.Context) (onet.Service, error) {
 		return nil, err
 	}
 
-	if err := s.RegisterHandlers(s.GenesisTx, s.Setup, s.StoreTree, s.TreesBLSCoSi); err != nil {
+	if err := s.RegisterHandlers(s.GenesisTx, s.Setup, s.TreesBLSCoSi); err != nil {
 		return nil, errors.New("Couldn't register messages")
 	}
 

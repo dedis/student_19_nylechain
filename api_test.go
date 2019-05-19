@@ -45,9 +45,6 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 	for _, trees := range lc.LocalityTrees {
 		for _, tree := range trees[1:] {
 			fullTreeSlice = append(fullTreeSlice, tree)
-			for _, serverIdentity := range tree.Roster.List {
-				c.StoreTree(serverIdentity, tree)
-			}
 		}
 	}
 
