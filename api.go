@@ -18,15 +18,15 @@ type Client struct {
 }
 
 // Setup sends a SetupArgs to every server. It prints an error if there was one for any of the servers.
-func (c *Client) Setup(roster *onet.Roster, translations map[onet.TreeID][]byte) error {
+func (c *Client) Setup(roster *onet.Roster, translations map[onet.TreeID][]byte, distances map[string]map[string]float64) error {
 	void := &service.VoidReply{}
 	sArgs := &service.SetupArgs{
 		Roster:       roster,
 		Translations: translations,
+		Distances: distances,
 	}
 	var wg sync.WaitGroup
-	n := len(roster.List)
-	wg.Add(n)
+	wg.Add(len(roster.List))
 	for _, si := range roster.List {
 		go func(si *network.ServerIdentity) {
 			err := c.SendProtobuf(si, sArgs, void)

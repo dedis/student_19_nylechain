@@ -49,7 +49,8 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 	}
 
 	translations := service.TreesToSetsOfNodes(fullTreeSlice, roster.List)
-	err := c.Setup(roster, translations)
+	distances := service.CreateMatrixOfDistances(serverIDS, lc.Nodes)
+	err := c.Setup(roster, translations, distances)
 	log.ErrFatal(err)
 
 	// Genesis of 2 different coins
@@ -138,16 +139,19 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 	txEncodedAlt, _ := protobuf.Encode(&txAlt)
 
 	var wg sync.WaitGroup
-	n := len(servers[:10])
+	n := len(servers[:5])
 	wg.Add(n)
-	for _, server := range servers[:10] {
+	for _, server := range servers[:5] {
 		go func(server *onet.Server) {
 			// I exclude the first tree of every slice since it only contains one node
 			trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)][1:]
 			var treeIDs []onet.TreeID
 			for _, tree := range trees {
 				treeIDs = append(treeIDs, tree.ID)
-				log.LLvl1(tree.Roster.List)
+				/*for _, id := range tree.Roster.List {
+					log.LLvl1(id.String()[len(id.String())-2:])
+				}
+				log.LLvl1("---")*/
 			}
 			if len(trees) > 0 {
 				// First valid Tx

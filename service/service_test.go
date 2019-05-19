@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 
+	"go.dedis.ch/onet/v3/network"
+
 	"github.com/dedis/student_19_nylechain/gentree"
 	"github.com/dedis/student_19_nylechain/transaction"
 	"go.dedis.ch/kyber/v3/util/random"
@@ -65,9 +67,10 @@ func TestTreesBLSCoSi(t *testing.T) {
 	// Translating the trees into sets
 
 	var fullTreeSlice []*onet.Tree
-
+	var serverIDs []*network.ServerIdentity
 	for _, server := range servers {
 		mapOfServers[server.ServerIdentity.String()] = server
+		serverIDs = append(serverIDs, server.ServerIdentity)
 	}
 
 	for _, trees := range lc.LocalityTrees {
@@ -77,11 +80,13 @@ func TestTreesBLSCoSi(t *testing.T) {
 	}
 
 	translations := TreesToSetsOfNodes(fullTreeSlice, roster.List)
+	distances := CreateMatrixOfDistances(serverIDs, lc.Nodes)
 	for _, server := range servers {
 		service := server.Service(ServiceName).(*Service)
 		service.Setup(&SetupArgs{
 			Roster:       roster,
 			Translations: translations,
+			Distances:    distances,
 		})
 	}
 

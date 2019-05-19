@@ -54,6 +54,8 @@ type Service struct {
 
 	Lc gentree.LocalityContext
 
+	distances map[string]map[string]float64
+
 	// Complete list of the Server Identities
 	orderedServerIdentities []*network.ServerIdentity
 
@@ -131,33 +133,6 @@ func (s *Service) vf(msg []byte, id onet.TreeID) error {
 	return err
 }
 
-// TreesToSetsOfNodes translates a Tree into an ordered slice of the nodes present in that tree.
-// The bytes are the indexes of orderedSlice that are part of this tree, in increasing order.
-// This means that different trees on the same set of nodes will translate to the same set.
-// Example : Tree A has root orderedSlice[3] and children orderedSlice[0], orderedSlice[1].
-// Tree B has root orderedSlice[1] and children orderedSlice[3], orderedSlice[0].
-// Both will be translated to a same array of bytes : [byte(0), byte(1), byte(3)]
-// We use arrays of bytes because they will be used in bbolt.
-// It should be called once at the start, and the returned map will be one of the arguments of each service's Setup function.
-func TreesToSetsOfNodes(trees []*onet.Tree, orderedSlice []*network.ServerIdentity) map[onet.TreeID][]byte {
-	result := make(map[onet.TreeID][]byte)
-	for _, tree := range trees {
-		var set []byte
-		for i, serverIdentity := range orderedSlice {
-			// Check that this serverIdentity is in the tree's roster
-			// If yes, append i as a byte
-			for _, id := range tree.Roster.List {
-				if serverIdentity.Equal(id) {
-					set = append(set, byte(i))
-					break
-				}
-			}
-		}
-		result[tree.ID] = set
-	}
-	return result
-}
-
 // IsSubSetOfNodes returns if subID's set is a strict subset of fullID's set of nodes.
 // Since fullSet and subSet both are slices of increasing indexes of nodes, we need to check that every index in subSet is in fullSet.
 // Example : [byte(0), byte(3)] is a subset of [byte(0), byte(1), by byte(3)]
@@ -223,11 +198,14 @@ func (s *Service) Setup(args *SetupArgs) (*VoidReply, error) {
 	lc := gentree.LocalityContext{}
 	lc.Setup(args.Roster, "nodeGen/nodes.txt")
 	s.Lc = lc
+
+	// We store every tree this node is a part of in s.trees
 	for _, trees := range lc.LocalityTrees {
 		for _, tree := range trees[1:] {
 			for _, si := range tree.Roster.List {
 				if si.Equal(s.ServerIdentity()) {
 					s.trees[tree.ID] = tree
+					break
 				}
 			}
 		}
@@ -235,6 +213,7 @@ func (s *Service) Setup(args *SetupArgs) (*VoidReply, error) {
 
 	s.orderedServerIdentities = args.Roster.List
 	s.treeIDSToSets = args.Translations
+	s.distances = args.Distances
 	return &VoidReply{}, nil
 }
 
@@ -451,6 +430,80 @@ func (s *Service) startPropagation(propagate propagate.PropagationFunc, tree *on
 	return nil
 }
 
+// newService receives the context that holds information about the node it's
+// running on. Saving and loading can be done using the context. The data will
+// be stored in memory for tests and simulations, and on disk for real deployments.
+func newService(c *onet.Context) (onet.Service, error) {
+	s := &Service{
+		ServiceProcessor: onet.NewServiceProcessor(c),
+	}
+	_, err := c.ProtocolRegister(protoName, s.NewDefaultProtocol)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.RegisterHandlers(s.GenesisTx, s.Setup, s.TreesBLSCoSi); err != nil {
+		return nil, errors.New("Couldn't register messages")
+	}
+
+	s.propagateF, s.mypi, err = propagate.NewPropagationFunc(c, "Propagate", s.propagateHandler, -1)
+	if err != nil {
+		return nil, err
+	}
+	s.trees = make(map[onet.TreeID]*onet.Tree)
+	s.mutexs = make(map[string]*sync.Mutex)
+
+	db, bucketNameTx := s.GetAdditionalBucket([]byte("Tx"))
+	_, bucketNameLastTx := s.GetAdditionalBucket([]byte("LastTx"))
+	s.bucketNameTx = bucketNameTx
+	s.bucketNameLastTx = bucketNameLastTx
+	s.db = db
+	return s, nil
+}
+
+// CreateMatrixOfDistances takes a list of ServerIdentity and a LocalityNodes to create a map of maps where the two keys are
+// the ServerIdentity as strings and the value is the distance separating the two.
+func CreateMatrixOfDistances(serverIDs []*network.ServerIdentity, lcNodes gentree.LocalityNodes) map[string]map[string]float64 {
+	outerMap := make(map[string]map[string]float64)
+	for _, outerID := range serverIDs {
+		innerMap := make(map[string]float64)
+		for _, innerID := range serverIDs {
+			oNode := lcNodes.GetByName(lcNodes.GetServerIdentityToName(outerID))
+			iNode := lcNodes.GetByName(lcNodes.GetServerIdentityToName(innerID))
+			innerMap[innerID.String()] = lcNodes.ClusterBunchDistances[oNode][iNode]
+		}
+		outerMap[outerID.String()] = innerMap
+	}
+	return outerMap
+}
+
+// TreesToSetsOfNodes translates a Tree into an ordered slice of the nodes present in that tree.
+// The bytes are the indexes of orderedSlice that are part of this tree, in increasing order.
+// This means that different trees on the same set of nodes will translate to the same set.
+// Example : Tree A has root orderedSlice[3] and children orderedSlice[0], orderedSlice[1].
+// Tree B has root orderedSlice[1] and children orderedSlice[3], orderedSlice[0].
+// Both will be translated to a same array of bytes : [byte(0), byte(1), byte(3)]
+// We use arrays of bytes because they will be used in bbolt.
+// It should be called once at the start, and the returned map will be one of the arguments of each service's Setup function.
+func TreesToSetsOfNodes(trees []*onet.Tree, orderedSlice []*network.ServerIdentity) map[onet.TreeID][]byte {
+	result := make(map[onet.TreeID][]byte)
+	for _, tree := range trees {
+		var set []byte
+		for i, serverIdentity := range orderedSlice {
+			// Check that this serverIdentity is in the tree's roster
+			// If yes, append i as a byte
+			for _, id := range tree.Roster.List {
+				if serverIdentity.Equal(id) {
+					set = append(set, byte(i))
+					break
+				}
+			}
+		}
+		result[tree.ID] = set
+	}
+	return result
+}
+
 // GenerateSubTrees returns a list of nested trees and their IDs, starting with the smallest one of height 1.
 // The number of subtrees returned needs to be specified, as well as the branching factor.
 // The first n-1 subtrees are all perfect trees while
@@ -488,35 +541,4 @@ func GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
 		Roster: args.Roster,
 	}
 	return reply, nil
-}
-
-// newService receives the context that holds information about the node it's
-// running on. Saving and loading can be done using the context. The data will
-// be stored in memory for tests and simulations, and on disk for real deployments.
-func newService(c *onet.Context) (onet.Service, error) {
-	s := &Service{
-		ServiceProcessor: onet.NewServiceProcessor(c),
-	}
-	_, err := c.ProtocolRegister(protoName, s.NewDefaultProtocol)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.RegisterHandlers(s.GenesisTx, s.Setup, s.TreesBLSCoSi); err != nil {
-		return nil, errors.New("Couldn't register messages")
-	}
-
-	s.propagateF, s.mypi, err = propagate.NewPropagationFunc(c, "Propagate", s.propagateHandler, -1)
-	if err != nil {
-		return nil, err
-	}
-	s.trees = make(map[onet.TreeID]*onet.Tree)
-	s.mutexs = make(map[string]*sync.Mutex)
-
-	db, bucketNameTx := s.GetAdditionalBucket([]byte("Tx"))
-	_, bucketNameLastTx := s.GetAdditionalBucket([]byte("LastTx"))
-	s.bucketNameTx = bucketNameTx
-	s.bucketNameLastTx = bucketNameLastTx
-	s.db = db
-	return s, nil
 }

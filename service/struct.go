@@ -32,6 +32,7 @@ type VoidReply struct{}
 type SetupArgs struct {
 	Roster       *onet.Roster
 	Translations map[onet.TreeID][]byte
+	Distances    map[string]map[string]float64
 }
 
 // PropagateData is what is received by propagateHandler. It's propagated by TreesBLSCoSi.

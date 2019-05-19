@@ -84,8 +84,12 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 		}
 	}
 
+	// Create a matrix of distances between serverIdentities
+	distances := service.CreateMatrixOfDistances(serverIDS, lc.Nodes)
+
 	translations := service.TreesToSetsOfNodes(fullTreeSlice, config.Roster.List)
-	err := c.Setup(config.Roster, translations)
+	err := c.Setup(config.Roster, translations, distances)
+	
 	log.ErrFatal(err)
 
 	// Genesis of 2 different coins
