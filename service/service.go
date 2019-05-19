@@ -263,7 +263,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	// We send the initialization on the entire roster before sending signatures
 	n := len(args.TreeIDs)
 	fullTreeID := args.TreeIDs[n-1]
-	data := PropagateData{Tx: tx}
+	data := PropagateData{Tx: tx, ServerID: s.ServerIdentity().String()}
 
 	// Propagate over the last tree which is the "complete" one
 	err = s.startPropagation(s.propagateF, s.trees[fullTreeID], &data)
@@ -295,6 +295,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 			} else {
 
 				data := &PropagateData{
+					ServerID:  s.ServerIdentity().String(),
 					Tx:        tx,
 					Signature: sign,
 					TreeID:    tree.ID,
@@ -328,6 +329,8 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 // bucket, and tracks the last transaction for each coin and set in the "LastTx" bucket.
 func (s *Service) propagateHandler(msg network.Message) {
 	data := msg.(*PropagateData)
+	dist := s.distances[s.ServerIdentity().String()][data.ServerID]
+	time.Sleep(time.Duration(dist) * time.Millisecond)
 	txEncoded, err := protobuf.Encode(&data.Tx)
 	if err != nil {
 		log.Error(err)

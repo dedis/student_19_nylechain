@@ -37,6 +37,7 @@ type SetupArgs struct {
 
 // PropagateData is what is received by propagateHandler. It's propagated by TreesBLSCoSi.
 type PropagateData struct {
+	ServerID  string
 	Tx        transaction.Tx
 	Signature []byte
 	TreeID    onet.TreeID
