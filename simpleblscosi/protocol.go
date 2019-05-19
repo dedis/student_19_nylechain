@@ -227,6 +227,10 @@ func (c *SimpleBLSCoSi) handleCommit(in *SimpleCommit) error {
 // handleCommitReplies brings up the commitReply of each node in the tree to the root.
 func (c *SimpleBLSCoSi) handleCommitReplies(replies []*SimpleCommitReply) error {
 
+	if err := c.vf(c.Message, c.Tree().ID); err != nil {
+		return c.handleError(&TransmitError{Error: err.Error()})
+	}
+
 	defer func() {
 		// protocol is finished
 		close(c.done)

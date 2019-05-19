@@ -1,12 +1,12 @@
 package main
 
 import (
-	"github.com/dedis/protobuf"
-	"github.com/dedis/student_19_nylechain/transaction"
 	"github.com/BurntSushi/toml"
+	"github.com/dedis/protobuf"
 	nylechain "github.com/dedis/student_19_nylechain"
 	"github.com/dedis/student_19_nylechain/gentree"
 	"github.com/dedis/student_19_nylechain/service"
+	"github.com/dedis/student_19_nylechain/transaction"
 	"go.dedis.ch/kyber/v3/pairing"
 	"go.dedis.ch/kyber/v3/sign/bls"
 	"go.dedis.ch/kyber/v3/util/random"
@@ -70,7 +70,7 @@ func (s *SimulationService) Node(config *onet.SimulationConfig) error {
 func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	size := config.Tree.Size()
 	log.Lvl2("Size is:", size, "rounds:", s.Rounds)
-	
+
 	c := nylechain.NewClient()
 
 	var fullTreeSlice []*onet.Tree
@@ -88,7 +88,7 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	}
 
 	translations := service.TreesToSetsOfNodes(fullTreeSlice, config.Roster.List)
-	err := c.Setup(serverIDS, translations)
+	err := c.Setup(config.Roster, translations)
 	log.ErrFatal(err)
 
 	// Genesis of 2 different coins
@@ -122,7 +122,6 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 		Signature: signature,
 	}
 	txEncoded, _ := protobuf.Encode(&tx)
-
 	treeIDs := make([]onet.TreeID, 1)
 	treeIDs[0] = lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(serverIDS[0])][1].ID
 	reply, err0 := c.TreesBLSCoSi(serverIDS[0], treeIDs, txEncoded)

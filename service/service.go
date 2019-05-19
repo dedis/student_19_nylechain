@@ -231,7 +231,20 @@ func (s *Service) StoreTree(arg *StoreTreeArg) (*VoidReply, error) {
 
 // Setup stores the ordered slice of Server Identities and the translations from Trees to Sets of nodes.
 func (s *Service) Setup(args *SetupArgs) (*VoidReply, error) {
-	s.orderedServerIdentities = args.ServerIDS
+	lc := gentree.LocalityContext{}
+	lc.Setup(args.Roster, "nodeGen/nodes.txt")
+	s.Lc = lc
+	for _, trees := range lc.LocalityTrees {
+		for _, tree := range trees[1:] {
+			for _, si := range tree.Roster.List {
+				if si == s.ServerIdentity() {
+					s.trees[tree.ID] = tree
+				}
+			}
+		}
+	}
+
+	s.orderedServerIdentities = args.Roster.List
 	s.treeIDSToSets = args.Translations
 	return &VoidReply{}, nil
 }
@@ -416,7 +429,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 			return err
 		}
 		// Register as LastTx for every subset of this tree's set
-		/*for id := range s.trees {
+		for id := range s.trees {
 			isSubset, err := s.IsSubSetOfNodes(data.TreeID, id)
 			if err != nil {
 				return err
@@ -427,7 +440,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 					return err
 				}
 			}
-		}*/
+		}
 		return nil
 	})
 	if err != nil {

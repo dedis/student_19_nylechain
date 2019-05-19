@@ -1,11 +1,13 @@
 package nylechain
 
 import (
-	_ "go.dedis.ch/onet/v3/log"
+	"sync"
+
 	"github.com/dedis/student_19_nylechain/service"
 	"go.dedis.ch/cothority/v3"
 	"go.dedis.ch/kyber/v3"
 	"go.dedis.ch/onet/v3"
+	"go.dedis.ch/onet/v3/log"
 	"go.dedis.ch/onet/v3/network"
 )
 
@@ -33,18 +35,26 @@ func (c *Client) StoreTree(si *network.ServerIdentity, tree *onet.Tree) error {
 
 }
 
-// Setup sends a SetupArgs to every server. It returns an error if there was one for any of the servers.
-func (c *Client) Setup(serverIDS []*network.ServerIdentity, translations map[onet.TreeID][]byte) error {
+// Setup sends a SetupArgs to every server. It prints an error if there was one for any of the servers.
+func (c *Client) Setup(roster *onet.Roster, translations map[onet.TreeID][]byte) error {
 	void := &service.VoidReply{}
 	sArgs := &service.SetupArgs{
-		ServerIDS: serverIDS, Translations: translations,
+		Roster:       roster,
+		Translations: translations,
 	}
-	for _, si := range serverIDS {
-		err := c.SendProtobuf(si, sArgs, void)
-		if err != nil {
-			return err
-		}
+	var wg sync.WaitGroup
+	n := len(roster.List)
+	wg.Add(n)
+	for _, si := range roster.List {
+		go func(si *network.ServerIdentity) {
+			err := c.SendProtobuf(si, sArgs, void)
+			if err != nil {
+				log.Fatal(err)
+			}
+			wg.Done()
+		}(si)
 	}
+	wg.Wait()
 	return nil
 }
 
