@@ -3,6 +3,7 @@ package simpleblscosi
 import (
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/dedis/student_19_nylechain/transaction"
 	"go.dedis.ch/protobuf"
@@ -28,6 +29,9 @@ type SimpleBLSCoSi struct {
 	// Keys are concatenations of TreeID + CoinID
 	mutexs map[string]*sync.Mutex
 
+	// Distances between servers
+	distances map[string]map[string]float64
+
 	prepare      chan prepareChan
 	prepareReply chan prepareReplyChan
 	commit       chan commitChan
@@ -48,13 +52,14 @@ type VerificationFn func(msg []byte, id onet.TreeID) error
 
 // NewProtocol is a callback that is executed when starting the protocol.
 func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, set []byte, mutexs map[string]*sync.Mutex,
-	suite *pairing.SuiteBn256) (onet.ProtocolInstance, error) {
+	distances map[string]map[string]float64, suite *pairing.SuiteBn256) (onet.ProtocolInstance, error) {
 	c := &SimpleBLSCoSi{
 		TreeNodeInstance: node,
 		suite:            suite,
 		vf:               vf,
 		set:              set,
 		mutexs:           mutexs,
+		distances:        distances,
 		done:             make(chan bool),
 		FinalSignature:   make(chan []byte, 1),
 	}
@@ -153,8 +158,17 @@ func (c *SimpleBLSCoSi) handlePrepare(in *SimplePrepare) error {
 	if c.IsLeaf() {
 		return c.handlePrepareReplies(nil)
 	}
+	var err error
 	// send to children
-	return c.SendToChildren(in)
+	for _, child := range c.Children() {
+		dist := c.distances[c.ServerIdentity().String()][child.ServerIdentity.String()]
+		time.Sleep(time.Duration(dist) * time.Millisecond)
+		err0 := c.SendTo(child, in)
+		if err != nil {
+			err = err0
+		}
+	}
+	return err
 }
 
 // handleAllCommitment relay the commitments up in the tree
@@ -192,6 +206,8 @@ func (c *SimpleBLSCoSi) handlePrepareReplies(replies []*SimplePrepareReply) erro
 	outMsg := &SimplePrepareReply{
 		Sig: sigBuf,
 	}
+	dist := c.distances[c.ServerIdentity().String()][c.Parent().ServerIdentity.String()]
+	time.Sleep(time.Duration(dist) * time.Millisecond)
 	return c.SendTo(c.Parent(), outMsg)
 }
 
@@ -221,7 +237,15 @@ func (c *SimpleBLSCoSi) handleCommit(in *SimpleCommit) error {
 	}
 
 	// otherwise send it to children
-	return c.SendToChildren(in)
+	for _, child := range c.Children() {
+		dist := c.distances[c.ServerIdentity().String()][child.ServerIdentity.String()]
+		time.Sleep(time.Duration(dist) * time.Millisecond)
+		err0 := c.SendTo(child, in)
+		if err != nil {
+			err = err0
+		}
+	}
+	return err
 }
 
 // handleCommitReplies brings up the commitReply of each node in the tree to the root.
@@ -255,6 +279,8 @@ func (c *SimpleBLSCoSi) handleCommitReplies(replies []*SimpleCommitReply) error 
 
 	// send it back to parent
 	if !c.IsRoot() {
+		dist := c.distances[c.ServerIdentity().String()][c.Parent().ServerIdentity.String()]
+		time.Sleep(time.Duration(dist) * time.Millisecond)
 		return c.SendTo(c.Parent(), out)
 	}
 
@@ -269,6 +295,8 @@ func (c *SimpleBLSCoSi) handleError(tErr *TransmitError) error {
 	if c.IsRoot() {
 		return c.handleShutdown(&Shutdown{Error: tErr.Error})
 	}
+	dist := c.distances[c.ServerIdentity().String()][c.Parent().ServerIdentity.String()]
+	time.Sleep(time.Duration(dist) * time.Millisecond)
 	return c.SendTo(c.Parent(), &TransmitError{Error: tErr.Error})
 }
 
@@ -289,7 +317,15 @@ func (c *SimpleBLSCoSi) handleShutdown(shutdown *Shutdown) error {
 	c.mutexs[key].Unlock()
 
 	if !c.IsLeaf() {
-		c.SendToChildren(shutdown)
+		for _, child := range c.Children() {
+			dist := c.distances[c.ServerIdentity().String()][child.ServerIdentity.String()]
+			time.Sleep(time.Duration(dist) * time.Millisecond)
+			err0 := c.SendTo(child, shutdown)
+			if err != nil {
+				err = err0
+			}
+		}
+		return err
 	}
 	if c.IsRoot() {
 		c.FinalSignature <- nil

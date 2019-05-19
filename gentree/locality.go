@@ -3,25 +3,23 @@ package gentree
 import (
 	"bufio"
 	"fmt"
-	"go.dedis.ch/onet/v3"
-	"go.dedis.ch/onet/v3/log"
-	"go.dedis.ch/onet/v3/network"
 	"io"
-	"math"
 	"os"
 	"strconv"
 	"strings"
+
+	"go.dedis.ch/onet/v3"
+	"go.dedis.ch/onet/v3/log"
+	"go.dedis.ch/onet/v3/network"
 )
 
-
 type LocalityContext struct {
-	Nodes              LocalityNodes
+	Nodes LocalityNodes
 	// keys are node names, values are a slice of graph trees
-	graphTree 			map[string][]GraphTree
+	graphTree map[string][]GraphTree
 	// keys are node names, values are a slice of onet trees that are locality preserving
-	LocalityTrees        map[string][]*onet.Tree
+	LocalityTrees map[string][]*onet.Tree
 }
-
 
 type GraphTree struct {
 	Tree        *onet.Tree
@@ -64,13 +62,13 @@ func (s *LocalityContext) Setup(roster *onet.Roster, nodesFile string) {
 
 	s.initializeServerToNodeMap(roster)
 
-
 	// allocate distances
 	for _, node := range s.Nodes.All {
 		s.Nodes.ClusterBunchDistances[node] = make(map[*LocalityNode]float64)
 		s.Nodes.Links[node] = make(map[*LocalityNode]map[*LocalityNode]bool)
 		for _, node2 := range s.Nodes.All {
-			s.Nodes.ClusterBunchDistances[node][node2] = math.MaxFloat64
+			// Change here, default distance is only 500
+			s.Nodes.ClusterBunchDistances[node][node2] = float64(500)
 			s.Nodes.Links[node][node2] = make(map[*LocalityNode]bool)
 
 			if node == node2 {
@@ -79,13 +77,12 @@ func (s *LocalityContext) Setup(roster *onet.Roster, nodesFile string) {
 		}
 	}
 
-
 	// just emmptry pings for now
 	pings := make(map[string]map[string]float64)
 	s.genTrees(RND_NODES, NR_LEVELS, OPTIMIZED, MIN_BUNCH_SIZE, OPTTYPE, pings)
 }
 
-func (s *LocalityContext)genTrees(RandomCoordsLevels bool, Levels int, Optimized bool, OptimisationLevel int, OptType int, pingDist map[string]map[string]float64) {
+func (s *LocalityContext) genTrees(RandomCoordsLevels bool, Levels int, Optimized bool, OptimisationLevel int, OptType int, pingDist map[string]map[string]float64) {
 
 	// genTrees placeholder code, ideally we'll generate trees from small to large
 	CreateLocalityGraph(s.Nodes, RandomCoordsLevels, RandomCoordsLevels, Levels, pingDist)
@@ -104,13 +101,12 @@ func (s *LocalityContext)genTrees(RandomCoordsLevels bool, Levels int, Optimized
 		for src, m := range dist2 {
 			for dst, dist := range m {
 				log.Lvl3("comparing for", src.Name, "-", dst.Name, "physical dist", ComputeDist(src, dst, pingDist), "approx dist", dist)
-				if dist > 5 * ComputeDist(src, dst, pingDist) {
-					log.Lvl3("comparing for", src.Name, "-", dst.Name, "physical dist", ComputeDist(src, dst, pingDist), "approx dist", dist, "5x dist", 5 * ComputeDist(src, dst, pingDist))
+				if dist > 5*ComputeDist(src, dst, pingDist) {
+					log.Lvl3("comparing for", src.Name, "-", dst.Name, "physical dist", ComputeDist(src, dst, pingDist), "approx dist", dist, "5x dist", 5*ComputeDist(src, dst, pingDist))
 					log.Lvl2("way too long!!!")
+				}
 			}
-			}
-			}
-
+		}
 
 		for i, n := range tree {
 			s.graphTree[crtRootName] = append(s.graphTree[crtRootName], GraphTree{
@@ -125,7 +121,7 @@ func (s *LocalityContext)genTrees(RandomCoordsLevels bool, Levels int, Optimized
 		for _, n := range graphTrees {
 
 			rosterNames := make([]string, 0)
-			for _,si := range n.Tree.Roster.List {
+			for _, si := range n.Tree.Roster.List {
 				rosterNames = append(rosterNames, s.Nodes.GetServerIdentityToName(si))
 			}
 
@@ -135,9 +131,6 @@ func (s *LocalityContext)genTrees(RandomCoordsLevels bool, Levels int, Optimized
 		}
 	}
 }
-
-
-
 
 //Coumputes A Binary Tree Based On A Graph
 func (s *LocalityContext) createBinaryTreeFromGraphTree(GraphTree GraphTree) *onet.Tree {
@@ -175,7 +168,6 @@ func (s *Service) Test(config *onet.SimulationConfig) {
 }
 */
 
-
 func (s *LocalityContext) initializeServerToNodeMap(roster *onet.Roster) {
 	if len(roster.List) != len(s.Nodes.All) {
 		log.LLvl1(len(roster.List))
@@ -190,12 +182,10 @@ func (s *LocalityContext) initializeServerToNodeMap(roster *onet.Roster) {
 	}
 }
 
-
-
 func (s *LocalityContext) readNodesFromFile(filename string) {
 	s.Nodes.All = make([]*LocalityNode, 0)
 
-	readLine,_ := readFileLineByLine(filename)
+	readLine, _ := readFileLineByLine(filename)
 	lineNr := 0
 
 	for true {
@@ -210,7 +200,7 @@ func (s *LocalityContext) readNodesFromFile(filename string) {
 
 		tokens := strings.Split(line, " ")
 		coords := strings.Split(tokens[1], ",")
-		x,y := coords[0], coords[1]
+		x, y := coords[0], coords[1]
 		name, level_str := tokens[0], tokens[2]
 
 		level, err := strconv.Atoi(level_str)
@@ -235,7 +225,6 @@ func (s *LocalityContext) readNodesFromFile(filename string) {
 	log.Lvl3("Read nodes", s.Nodes.All)
 }
 
-
 func createNode(Name string, x float64, y float64, level int) *LocalityNode {
 	var myNode LocalityNode
 
@@ -252,13 +241,12 @@ func createNode(Name string, x float64, y float64, level int) *LocalityNode {
 	return &myNode
 }
 
-
 func readFileLineByLine(configFilePath string) (func() string, error) {
 	f, err := os.Open(configFilePath)
 	//defer close(f)
 
 	if err != nil {
-		return func() string {return ""}, err
+		return func() string { return "" }, err
 	}
 	checkErr(err)
 	reader := bufio.NewReader(f)
@@ -275,11 +263,9 @@ func readFileLineByLine(configFilePath string) (func() string, error) {
 	}, nil
 }
 
-
 func checkErr(e error) {
 	if e != nil && e != io.EOF {
 		fmt.Print(e)
 		panic(e)
 	}
 }
-

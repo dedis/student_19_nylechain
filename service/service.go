@@ -176,7 +176,7 @@ func (s *Service) IsSubSetOfNodes(fullID onet.TreeID, subID onet.TreeID) (bool, 
 func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error) {
 	suite := pairing.NewSuiteBn256()
 	set := s.treeIDSToSets[n.Tree().ID]
-	return simpleblscosi.NewProtocol(n, s.vf, set, s.mutexs, suite)
+	return simpleblscosi.NewProtocol(n, s.vf, set, s.mutexs, s.distances, suite)
 }
 
 // NewProtocol is an override. It's called on children automatically
@@ -185,7 +185,7 @@ func (s *Service) NewProtocol(n *onet.TreeNodeInstance, conf *onet.GenericConfig
 	case protoName:
 		suite := pairing.NewSuiteBn256()
 		set := s.treeIDSToSets[n.Tree().ID]
-		return simpleblscosi.NewProtocol(n, s.vf, set, s.mutexs, suite)
+		return simpleblscosi.NewProtocol(n, s.vf, set, s.mutexs, s.distances, suite)
 	case "Propagate":
 		return s.mypi(n)
 	default:
@@ -193,7 +193,7 @@ func (s *Service) NewProtocol(n *onet.TreeNodeInstance, conf *onet.GenericConfig
 	}
 }
 
-// Setup stores the ordered slice of Server Identities and the translations from Trees to Sets of nodes.
+// Setup stores the ordered slice of Server Identities, the translations from Trees to Sets of nodes and the distances between servers.
 func (s *Service) Setup(args *SetupArgs) (*VoidReply, error) {
 	lc := gentree.LocalityContext{}
 	lc.Setup(args.Roster, "nodeGen/nodes.txt")
@@ -471,6 +471,12 @@ func CreateMatrixOfDistances(serverIDs []*network.ServerIdentity, lcNodes gentre
 			oNode := lcNodes.GetByName(lcNodes.GetServerIdentityToName(outerID))
 			iNode := lcNodes.GetByName(lcNodes.GetServerIdentityToName(innerID))
 			innerMap[innerID.String()] = lcNodes.ClusterBunchDistances[oNode][iNode]
+			if lcNodes.ClusterBunchDistances[oNode][iNode] > 1000 {
+				log.LLvl1(oNode.Name)
+				log.LLvl1(iNode.Name)
+				log.LLvl1(lcNodes.ClusterBunchDistances[oNode][iNode])
+				log.LLvl1("---")
+			}
 		}
 		outerMap[outerID.String()] = innerMap
 	}

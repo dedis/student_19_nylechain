@@ -61,7 +61,9 @@ func (s *SimulationService) Node(config *onet.SimulationConfig) error {
 	if index < 0 {
 		log.Fatal("Didn't find this node in roster")
 	}
+	
 	log.Lvl3("Initializing node-index", index)
+	
 	return s.SimulationBFTree.Node(config)
 }
 
