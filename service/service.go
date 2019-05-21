@@ -54,6 +54,9 @@ type Service struct {
 
 	Lc gentree.LocalityContext
 
+	// The IDs of roots of trees this node is a part of, except this node's server ID.
+	rootsIDs []*network.ServerIdentity
+
 	distances map[string]map[string]float64
 
 	// Complete list of the Server Identities
@@ -199,14 +202,24 @@ func (s *Service) Setup(args *SetupArgs) (*VoidReply, error) {
 	lc.Setup(args.Roster, "nodeGen/nodes.txt")
 	s.Lc = lc
 
-	// We store every tree this node is a part of in s.trees
-	for _, trees := range lc.LocalityTrees {
+	// We store every tree this node is a part of in s.trees, as well as the different roots's ID's of those trees in s.rootsIDs
+	for rootName, trees := range lc.LocalityTrees {
+		// this bool is used to know if this root has a tree which contains the current service
+		isRootLinked := false
 		for _, tree := range trees[1:] {
 			for _, si := range tree.Roster.List {
 				if si.Equal(s.ServerIdentity()) {
 					s.trees[tree.ID] = tree
+					isRootLinked = true
 					break
 				}
+			}
+		}
+		if isRootLinked {
+			sID := lc.Nodes.NameToServerIdentity(rootName)
+			// We don't want to store this node's identity in this slice
+			if !sID.Equal(s.ServerIdentity()) {
+				s.rootsIDs = append(s.rootsIDs, sID)
 			}
 		}
 	}
@@ -252,8 +265,22 @@ func (s *Service) GenesisTx(args *GenesisArgs) (*VoidReply, error) {
 // TreesBLSCoSi finds the trees rooted at this node and runs the protocol on them concurrently.
 // The "Message" argument is always an encoded transaction.
 // It propagates the transaction and the aggregate signatures so that they're stored.
+// If the Transmit argument is true, this node will contact the roots of the trees it's a part of, so that they launch
+// this function themselves for the same Tx.
 // The signatures returned are ordered like the corresponding trees.
 func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
+	log.LLvl1(s.ServerIdentity())
+	if args.Transmit {
+		coSiTree := &CoSiTrees{
+			Message:  args.Message,
+			// We don't want infinite loops
+			Transmit: false,
+		}
+		
+		for _, ID := range s.rootsIDs {
+			s.SendRaw(ID, coSiTree)
+		}
+	}
 	tx := transaction.Tx{}
 	err := protobuf.DecodeWithConstructors(args.Message, &tx, network.DefaultConstructors(cothority.Suite))
 	if err != nil {
@@ -309,6 +336,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 		}(i, tree)
 	}
 	wg.Wait()
+	
 
 	if problem != nil {
 		return &CoSiReplyTrees{

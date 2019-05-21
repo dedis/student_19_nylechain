@@ -46,6 +46,7 @@ type PropagateData struct {
 // CoSiTrees contains the encoded Tx.
 type CoSiTrees struct {
 	Message []byte
+	Transmit bool
 }
 
 // CoSiReplyTrees returns the signatures and the original message
