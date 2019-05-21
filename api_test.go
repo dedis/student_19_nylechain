@@ -139,32 +139,30 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 	txEncodedAlt, _ := protobuf.Encode(&txAlt)
 
 	var wg sync.WaitGroup
-	n := len(servers[:5])
+	n := len(servers[:3])
 	wg.Add(n)
-	for _, server := range servers[:5] {
+	for _, server := range servers[:3] {
 		go func(server *onet.Server) {
 			// I exclude the first tree of every slice since it only contains one node
 			trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)][1:]
-			var treeIDs []onet.TreeID
-			for _, tree := range trees {
-				treeIDs = append(treeIDs, tree.ID)
-				/*for _, id := range tree.Roster.List {
+			/*for _, tree := range trees {
+				for _, id := range tree.Roster.List {
 					log.LLvl1(id.String()[len(id.String())-2:])
 				}
-				log.LLvl1("---")*/
-			}
+				log.LLvl1("---")
+			}*/
 			if len(trees) > 0 {
 				// First valid Tx
 				var w sync.WaitGroup
 				w.Add(1)
 				var err0 error
 				go func() {
-					_, err0 = c.TreesBLSCoSi(server.ServerIdentity, treeIDs, txEncoded)
+					_, err0 = c.TreesBLSCoSi(server.ServerIdentity, txEncoded)
 
 					w.Done()
 				}()
 				// Double spending attempt
-				_, err := c.TreesBLSCoSi(server.ServerIdentity, treeIDs, txEncodedAlt)
+				_, err := c.TreesBLSCoSi(server.ServerIdentity, txEncodedAlt)
 				w.Wait()
 				log.LLvl1(err0)
 				log.LLvl1(err)
@@ -175,8 +173,6 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 				// Second valid Tx
 				//_, err = c.TreesBLSCoSi(server.ServerIdentity, treeIDs, )
 				//log.LLvl1(err)
-			} else {
-				log.LLvl1("0 TREE")
 			}
 			wg.Done()
 		}(server)

@@ -196,6 +196,7 @@ func (s *Service) NewProtocol(n *onet.TreeNodeInstance, conf *onet.GenericConfig
 	}
 }
 
+
 // Setup stores the ordered slice of Server Identities, the translations from Trees to Sets of nodes and the distances between servers.
 func (s *Service) Setup(args *SetupArgs) (*VoidReply, error) {
 	lc := gentree.LocalityContext{}

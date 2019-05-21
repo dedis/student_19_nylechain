@@ -127,7 +127,7 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	txEncoded, _ := protobuf.Encode(&tx)
 	treeIDs := make([]onet.TreeID, 1)
 	treeIDs[0] = lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(serverIDS[0])][1].ID
-	reply, err0 := c.TreesBLSCoSi(serverIDS[0], treeIDs, txEncoded)
+	reply, err0 := c.TreesBLSCoSi(serverIDS[0], txEncoded)
 	log.ErrFatal(err0)
 	log.LLvl1(reply)
 
