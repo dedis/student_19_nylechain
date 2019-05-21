@@ -23,7 +23,7 @@ func (c *Client) Setup(roster *onet.Roster, translations map[onet.TreeID][]byte,
 	sArgs := &service.SetupArgs{
 		Roster:       roster,
 		Translations: translations,
-		Distances: distances,
+		Distances:    distances,
 	}
 	var wg sync.WaitGroup
 	wg.Add(len(roster.List))
@@ -62,7 +62,7 @@ func (c *Client) GenesisTx(serverIDS []*network.ServerIdentity, id []byte, coinI
 // TreesBLSCoSi sends a CoSiTrees to the specified Server, and returns a CoSiReplyTrees or an eventual error.
 func (c *Client) TreesBLSCoSi(si *network.ServerIdentity, treeIDs []onet.TreeID, message []byte) (*service.CoSiReplyTrees, error) {
 	reply := &service.CoSiReplyTrees{}
-	err := c.SendProtobuf(si, &service.CoSiTrees{TreeIDs: treeIDs, Message: message}, reply)
+	err := c.SendProtobuf(si, &service.CoSiTrees{Message: message}, reply)
 	if err != nil {
 		return nil, err
 	}

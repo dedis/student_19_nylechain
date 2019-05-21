@@ -249,10 +249,10 @@ func (s *Service) GenesisTx(args *GenesisArgs) (*VoidReply, error) {
 	return &VoidReply{}, err
 }
 
-// TreesBLSCoSi is used when multiple subtrees are already constructed and runs the protocol on them concurrently.
+// TreesBLSCoSi finds the trees rooted at this node and runs the protocol on them concurrently.
 // The "Message" argument is always an encoded transaction.
 // It propagates the transaction and the aggregate signatures so that they're stored.
-// The signatures returned are ordered like the corresponding trees received.
+// The signatures returned are ordered like the corresponding trees.
 func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	tx := transaction.Tx{}
 	err := protobuf.DecodeWithConstructors(args.Message, &tx, network.DefaultConstructors(cothority.Suite))
@@ -261,12 +261,13 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 		return nil, err
 	}
 	// We send the initialization on the entire roster before sending signatures
-	n := len(args.TreeIDs)
-	fullTreeID := args.TreeIDs[n-1]
+	trees := s.Lc.LocalityTrees[s.Lc.Nodes.GetServerIdentityToName(s.ServerIdentity())][1:]
+	n := len(trees)
+	fullTree := trees[n-1]
 	data := PropagateData{Tx: tx, ServerID: s.ServerIdentity().String()}
 
 	// Propagate over the last tree which is the "complete" one
-	err = s.startPropagation(s.propagateF, s.trees[fullTreeID], &data)
+	err = s.startPropagation(s.propagateF, fullTree, &data)
 	if err != nil {
 		return nil, err
 	}
@@ -276,12 +277,11 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	treeIDS := make([]onet.TreeID, n)
 	signatures := make([][]byte, n)
 	var problem error
-	for i, treeID := range args.TreeIDs {
-		err := s.vf(args.Message, treeID)
+	for i, tree := range trees {
+		err := s.vf(args.Message, tree.ID)
 		if err != nil {
 			return nil, err
 		}
-		tree := s.trees[treeID]
 		go func(i int, tree *onet.Tree) {
 			defer wg.Done()
 			pi, _ := s.CreateProtocol(protoName, tree)

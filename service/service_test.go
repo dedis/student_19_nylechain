@@ -201,7 +201,6 @@ func TestTreesBLSCoSi(t *testing.T) {
 				var err0 error
 				go func() {
 					_, err0 = service.TreesBLSCoSi(&CoSiTrees{
-						TreeIDs: treeIDs,
 						Message: txEncoded,
 					})
 
@@ -209,7 +208,6 @@ func TestTreesBLSCoSi(t *testing.T) {
 				}()
 				// Double spending attempt
 				_, err := service.TreesBLSCoSi(&CoSiTrees{
-					TreeIDs: treeIDs,
 					Message: txEncodedAlt,
 				})
 				w.Wait()
