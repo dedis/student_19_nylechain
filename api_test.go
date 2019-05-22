@@ -8,7 +8,7 @@ import (
 
 	"go.dedis.ch/kyber/v3/pairing"
 
-	"github.com/dedis/protobuf"
+	"go.dedis.ch/protobuf"
 	"github.com/dedis/student_19_nylechain/gentree"
 	"github.com/dedis/student_19_nylechain/service"
 	"github.com/dedis/student_19_nylechain/transaction"

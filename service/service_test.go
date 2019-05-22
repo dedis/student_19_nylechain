@@ -61,7 +61,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 	servers, roster, _ := local.GenTree(45, true)
 	mapOfServers := make(map[string]*onet.Server)
 	lc := gentree.LocalityContext{}
-	lc.Setup(roster, "nodeGen/nodes.txt")
+	lc.Setup(roster, "../nodeGen/nodes.txt")
 	defer local.CloseAll()
 
 	// Translating the trees into sets

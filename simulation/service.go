@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/BurntSushi/toml"
-	"github.com/dedis/protobuf"
+	"go.dedis.ch/protobuf"
 	nylechain "github.com/dedis/student_19_nylechain"
 	"github.com/dedis/student_19_nylechain/gentree"
 	"github.com/dedis/student_19_nylechain/service"
@@ -13,6 +13,7 @@ import (
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/log"
 	_ "go.dedis.ch/onet/v3/simul/monitor"
+	"os"
 )
 
 /*
@@ -78,7 +79,11 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	var fullTreeSlice []*onet.Tree
 	serverIDS := config.Roster.List
 	lc := gentree.LocalityContext{}
+	crt, _ := os.Getwd()
+	log.LLvl1(crt)
 	lc.Setup(config.Roster, "../../nodeGen/nodes.txt")
+
+	log.LLvl1("after")
 
 	for _, trees := range lc.LocalityTrees {
 		for _, tree := range trees[1:] {
