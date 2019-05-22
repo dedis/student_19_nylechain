@@ -2,7 +2,7 @@ package simpleblscosi
 
 import (
 	"errors"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dedis/student_19_nylechain/transaction"
@@ -23,11 +23,14 @@ type SimpleBLSCoSi struct {
 	// the verification to run during upon receiving the prepare message
 	vf VerificationFn
 
+	commitMsg SimpleCommit
+
 	// Inherited from the service
 	set []byte
 
 	// Keys are concatenations of TreeID + CoinID
-	mutexs map[string]*sync.Mutex
+	coinToAtomic map[string]int
+	atomicCoinReserved []int32
 
 	// Distances between servers
 	distances map[string]map[string]float64
@@ -51,17 +54,18 @@ type SimpleBLSCoSi struct {
 type VerificationFn func(msg []byte, id onet.TreeID) error
 
 // NewProtocol is a callback that is executed when starting the protocol.
-func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, set []byte, mutexs map[string]*sync.Mutex,
-	distances map[string]map[string]float64, suite *pairing.SuiteBn256) (onet.ProtocolInstance, error) {
+func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, set []byte, atomicCoinReserved []int32,
+	coinToAtomic map[string]int, distances map[string]map[string]float64, suite *pairing.SuiteBn256) (onet.ProtocolInstance, error) {
 	c := &SimpleBLSCoSi{
-		TreeNodeInstance: node,
-		suite:            suite,
-		vf:               vf,
-		set:              set,
-		mutexs:           mutexs,
-		distances:        distances,
-		done:             make(chan bool),
-		FinalSignature:   make(chan []byte, 1),
+		TreeNodeInstance:   node,
+		suite:              suite,
+		vf:                 vf,
+		set:                set,
+		coinToAtomic: 		coinToAtomic,
+		atomicCoinReserved: atomicCoinReserved,
+		distances:          distances,
+		done:               make(chan bool),
+		FinalSignature:     make(chan []byte, 1),
 	}
 
 	// Register the channels we want to register and listens on
@@ -73,7 +77,7 @@ func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, set []byte, mut
 func (c *SimpleBLSCoSi) Dispatch() error {
 	nbrChild := len(c.Children())
 	if !c.IsRoot() {
-		log.Lvl3(c.ServerIdentity(), "waiting for prepare")
+		log.Lvl2(c.ServerIdentity(), "waiting for prepare")
 		prep := (<-c.prepare).SimplePrepare
 		err := c.handlePrepare(&prep)
 		if err != nil {
@@ -151,14 +155,16 @@ func (c *SimpleBLSCoSi) Start() error {
 // handlePrepare will pass the message to the round and send back the
 // output. If in == nil, we are root and we start the round.
 func (c *SimpleBLSCoSi) handlePrepare(in *SimplePrepare) error {
+	var err error
+
 	c.Message = in.Message
-	log.Lvlf3("%s prepare message: %x", c.ServerIdentity(), c.Message)
+	log.Lvlf2("%s prepare message: %x", c.ServerIdentity(), c.Message)
 
 	// if we are leaf, we should go to prepare-reply
 	if c.IsLeaf() {
 		return c.handlePrepareReplies(nil)
 	}
-	var err error
+
 	// send to children
 	for _, child := range c.Children() {
 		dist := c.distances[c.ServerIdentity().String()][child.ServerIdentity.String()]
@@ -171,65 +177,111 @@ func (c *SimpleBLSCoSi) handlePrepare(in *SimplePrepare) error {
 	return err
 }
 
-// handleAllCommitment relay the commitments up in the tree
+// handlePrepareReplies verifies the transaction, emits a corresponding positive
+// or negative reply, signs it and aggregates it to the corresponding set of replies from children
 // It expects *in* to be the full set of messages from the children.
 // The children's commitment must remain constants.
 func (c *SimpleBLSCoSi) handlePrepareReplies(replies []*SimplePrepareReply) error {
-	log.Lvl3(c.ServerIdentity(), "aggregated")
+	log.Lvl2(c.ServerIdentity(), "aggregated")
 
+
+	// verify that txn signed by sender, last txn in the coin and holder is sender
 	if err := c.vf(c.Message, c.Tree().ID); err != nil {
 		return c.handleError(&TransmitError{Error: err.Error()})
 	}
 
-	// combine the signatures from the replies
+	// sign the transaction
 	mySig, err := bls.Sign(c.suite, c.Private(), c.Message)
 	if err != nil {
 		log.Error(c.ServerIdentity(), err)
 		return c.handleError(&TransmitError{Error: err.Error()})
 	}
-	sigBuf, err := bls.AggregateSignatures(c.suite, append(prepareRepliesToSigs(replies), mySig)...)
+
+	// reserve the resource
+	tx := transaction.Tx{}
+	err = protobuf.Decode(c.Message, &tx)
 	if err != nil {
-		log.Error(c.ServerIdentity(), err)
-		return c.handleError(&TransmitError{Error: err.Error()})
+		return err
 	}
+	key := string(c.set) + string(tx.Inner.CoinID)
+	resourceIdx := c.coinToAtomic[key]
+	succeeded := atomic.CompareAndSwapInt32(&(c.atomicCoinReserved[resourceIdx]), 0, 1)
+
+
+	var posAggrSig, negAggrSig []byte
+	if !succeeded {
+		// resource occupied, send negative answer
+		log.Lvl2(c.ServerIdentity(), "sending to parent negative for", tx.Inner.ReceiverPK)
+		sigs := prepareRepliesToSigs(replies, false)
+		if len(sigs) > 0 {
+			negAggrSig, err = bls.AggregateSignatures(c.suite, append(sigs, mySig)...)
+			if err != nil {
+				log.Error(c.ServerIdentity(), err)
+				return c.handleError(&TransmitError{Error: err.Error()})
+			}
+		} else {
+			negAggrSig = mySig
+		}
+
+		posAggrSig, err = bls.AggregateSignatures(c.suite, prepareRepliesToSigs(replies, true)...)
+		if err != nil {
+			return err
+		}
+	} else {
+		log.Lvl2(c.ServerIdentity(), "sending to parent positive for", tx.Inner.ReceiverPK)
+		sigs := prepareRepliesToSigs(replies, true)
+		if len(sigs) > 0 {
+			posAggrSig, err = bls.AggregateSignatures(c.suite, append(sigs, mySig)...)
+			if err != nil {
+				log.Error(c.ServerIdentity(), err)
+				return c.handleError(&TransmitError{Error: err.Error()})
+			}
+		}else {
+			posAggrSig = mySig
+		}
+
+		negAggrSig, err = bls.AggregateSignatures(c.suite, prepareRepliesToSigs(replies, false)...)
+		if err != nil {
+			return err
+		}
+	}
+
+
+	// combine the signatures from the replies
 
 	// if we are the root, we need to start the commit phase
 	if c.IsRoot() {
 		out := &SimpleCommit{
-			AggrSig: sigBuf,
+			NegAggrSig: negAggrSig,
+			PosAggrSig: posAggrSig,
 		}
-		log.Lvlf3("%s starting commit (message = %x)", c.ServerIdentity(), c.Message)
+
+		log.Lvlf2("%s starting commit (message = %x)", c.ServerIdentity(), c.Message)
 		return c.handleCommit(out)
 	}
 
 	// otherwise send it to parent
+
 	outMsg := &SimplePrepareReply{
-		Sig: sigBuf,
+		NegSig: negAggrSig,
+		PosSig: posAggrSig,
 	}
+
+
 	dist := c.distances[c.ServerIdentity().String()][c.Parent().ServerIdentity.String()]
 	time.Sleep(time.Duration(dist) * time.Millisecond)
+	log.Lvlf2("%s sending to parent", c.ServerIdentity())
 	return c.SendTo(c.Parent(), outMsg)
 }
 
 // handleCommit dispatch the commit to the round and then dispatch the
 // results down the tree.
 func (c *SimpleBLSCoSi) handleCommit(in *SimpleCommit) error {
-	tx := transaction.Tx{}
-	err := protobuf.Decode(c.Message, &tx)
-	if err != nil {
-		return err
-	}
-	key := string(c.set) + string(tx.Inner.CoinID)
-	c.mutexs[key].Lock()
-	log.Lvlf3("%s handling commit", c.ServerIdentity())
 
-	// check that the commit is correct with respect to the aggregate key
-	pk := bls.AggregatePublicKeys(c.suite, c.Publics()...)
-	err = bls.Verify(c.suite, pk, c.Message, in.AggrSig)
-	if err != nil {
-		log.Error(c.ServerIdentity(), "commit verification failed with error: ", err.Error())
-		return err
-	}
+	var err error
+	c.commitMsg = *in
+
+	log.Lvlf2("%s handling commit", c.ServerIdentity())
 
 	// if we are leaf, then go to commitReply
 	if c.IsLeaf() {
@@ -251,30 +303,86 @@ func (c *SimpleBLSCoSi) handleCommit(in *SimpleCommit) error {
 // handleCommitReplies brings up the commitReply of each node in the tree to the root.
 func (c *SimpleBLSCoSi) handleCommitReplies(replies []*SimpleCommitReply) error {
 
-	if err := c.vf(c.Message, c.Tree().ID); err != nil {
-		return c.handleError(&TransmitError{Error: err.Error()})
-	}
-
 	defer func() {
 		// protocol is finished
 		close(c.done)
 		c.Done()
 	}()
 
-	log.Lvl3(c.ServerIdentity(), "aggregated")
+	tx := transaction.Tx{}
+	err := protobuf.Decode(c.Message, &tx)
+	if err != nil {
+		return err
+	}
 
-	// combine the signatures from the replies and my own signature
+	// TODO check that I signed the coming prepare, use a mask
+	/*
+	if err := c.vf(c.Message, c.Tree().ID); err != nil {
+		return c.handleError(&TransmitError{Error: err.Error()})
+	}
+	 */
+
+	var posAggrSig, negAggrSig []byte
+
 	mySig, err := bls.Sign(c.suite, c.Private(), c.Message)
 	if err != nil {
 		return err
 	}
-	sigBuf, err := bls.AggregateSignatures(c.suite, append(commitRepliesToSigs(replies), mySig)...)
+
+	// the optimistic case:
+	// check that the positive commit is correct with respect to the aggregate key
+	pk := bls.AggregatePublicKeys(c.suite, c.Publics()...)
+	err = bls.Verify(c.suite, pk, c.Message, c.commitMsg.PosAggrSig)
 	if err != nil {
-		return err
+		log.Error(c.ServerIdentity(), "positive commit verification failed with error: ", err.Error(), "for", tx.Inner.ReceiverPK )
+
+		// TODO: handle the cases when the nr of positive sign + nr of negative sigs isn't 2f+1
+
+		// emit a negative commit
+		// combine the signatures from the replies and my own signature
+		sigs := commitRepliesToSigs(replies, false)
+
+		if len(sigs) > 0 {
+			negAggrSig, err = bls.AggregateSignatures(c.suite, append(sigs, mySig)...)
+			if err != nil {
+				return err
+			}
+
+		} else {
+			negAggrSig = mySig
+
+		}
+
+		posAggrSig, err = bls.AggregateSignatures(c.suite, commitRepliesToSigs(replies, true)...)
+		if err != nil {
+			return err
+		}
+
+	} else {
+		// emit a positive commit
+		// combine the signatures from the replies and my own signature
+		sigs := commitRepliesToSigs(replies, true)
+		if len(sigs) > 0 {
+			posAggrSig, err = bls.AggregateSignatures(c.suite, append(sigs, mySig)...)
+			if err != nil {
+				return err
+			}
+		} else {
+			posAggrSig = mySig
+		}
+
+		negAggrSig, err = bls.AggregateSignatures(c.suite, commitRepliesToSigs(replies, false)...)
+		if err != nil {
+			return err
+		}
+
 	}
 
+	log.Lvl3(c.ServerIdentity(), "aggregated")
+
 	out := &SimpleCommitReply{
-		Sig: sigBuf,
+		PosSig: posAggrSig,
+		NegSig: negAggrSig,
 	}
 
 	// send it back to parent
@@ -286,7 +394,7 @@ func (c *SimpleBLSCoSi) handleCommitReplies(replies []*SimpleCommitReply) error 
 
 	// send it to the output channel
 	log.Lvl2(c.ServerIdentity(), "sending the final signature to channel")
-	c.FinalSignature <- sigBuf
+	c.FinalSignature <- posAggrSig
 	return nil
 }
 
@@ -313,8 +421,11 @@ func (c *SimpleBLSCoSi) handleShutdown(shutdown *Shutdown) error {
 	if err != nil {
 		return err
 	}
+
+	/*
 	key := string(c.set) + string(tx.Inner.CoinID)
-	c.mutexs[key].Unlock()
+	c.atomicCoinReserved[key].Unlock()
+	*/
 
 	if !c.IsLeaf() {
 		for _, child := range c.Children() {
@@ -335,18 +446,35 @@ func (c *SimpleBLSCoSi) handleShutdown(shutdown *Shutdown) error {
 	return errors.New(shutdown.Error)
 }
 
-func commitRepliesToSigs(replies []*SimpleCommitReply) [][]byte {
-	sigs := make([][]byte, len(replies))
-	for i, reply := range replies {
-		sigs[i] = reply.Sig
+func commitRepliesToSigs(replies []*SimpleCommitReply, usePosReplies bool) [][]byte {
+	sigs := make([][]byte, 0)
+	for _, reply := range replies {
+		if usePosReplies {
+			if len(reply.PosSig) > 0 {
+				sigs = append(sigs, reply.PosSig)
+			}
+		} else {
+			if len(reply.NegSig) > 0 {
+				sigs = append(sigs, reply.NegSig)
+			}
+		}
 	}
 	return sigs
 }
 
-func prepareRepliesToSigs(replies []*SimplePrepareReply) [][]byte {
-	sigs := make([][]byte, len(replies))
-	for i, reply := range replies {
-		sigs[i] = reply.Sig
+func prepareRepliesToSigs(replies []*SimplePrepareReply, usePosReplies bool) [][]byte {
+	sigs := make([][]byte, 0)
+	for _, reply := range replies {
+		if usePosReplies {
+			if len(reply.PosSig) > 0 {
+				sigs = append(sigs, reply.PosSig)
+			}
+		} else {
+			if len(reply.NegSig) > 0 {
+				sigs = append(sigs, reply.NegSig)
+			}
+		}
 	}
+	log.LLvl1("len is", len(sigs))
 	return sigs
 }

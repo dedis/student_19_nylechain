@@ -25,7 +25,8 @@ type prepareChan struct {
 
 // SimplePrepareReply is the signature or aggregate signature on the message.
 type SimplePrepareReply struct {
-	Sig []byte
+	PosSig []byte
+	NegSig []byte
 }
 
 // prepareReplyChan wraps SimplePrepareReply for onet.
@@ -38,7 +39,8 @@ type prepareReplyChan struct {
 
 // SimpleCommit is to commit the (hashed) prepared message.
 type SimpleCommit struct {
-	AggrSig []byte
+	PosAggrSig []byte
+	NegAggrSig []byte
 }
 
 // commitChan wraps SimpleCommit for onet.
@@ -49,7 +51,8 @@ type commitChan struct {
 
 // SimpleCommitReply is the (aggregate) signature for the commit message.
 type SimpleCommitReply struct {
-	Sig []byte
+	PosSig []byte
+	NegSig []byte
 }
 
 // commitReplyChan wraps SimpleCommitReply for onet.

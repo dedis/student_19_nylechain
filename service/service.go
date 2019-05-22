@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"math"
+	"os"
 	"sync"
 	"time"
 
@@ -69,7 +70,8 @@ type Service struct {
 	treeIDSToSets map[onet.TreeID][]byte
 
 	// Keys are concatenations of SetOfNodes + CoinID
-	mutexs map[string]*sync.Mutex
+	coinToAtomic map[string]int
+	atomicCoinReserved []int32
 
 	db *bbolt.DB
 
@@ -179,7 +181,7 @@ func (s *Service) IsSubSetOfNodes(fullID onet.TreeID, subID onet.TreeID) (bool, 
 func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error) {
 	suite := pairing.NewSuiteBn256()
 	set := s.treeIDSToSets[n.Tree().ID]
-	return simpleblscosi.NewProtocol(n, s.vf, set, s.mutexs, s.distances, suite)
+	return simpleblscosi.NewProtocol(n, s.vf, set, s.atomicCoinReserved, s.coinToAtomic, s.distances, suite)
 }
 
 // NewProtocol is an override. It's called on children automatically
@@ -188,7 +190,7 @@ func (s *Service) NewProtocol(n *onet.TreeNodeInstance, conf *onet.GenericConfig
 	case protoName:
 		suite := pairing.NewSuiteBn256()
 		set := s.treeIDSToSets[n.Tree().ID]
-		return simpleblscosi.NewProtocol(n, s.vf, set, s.mutexs, s.distances, suite)
+		return simpleblscosi.NewProtocol(n, s.vf, set, s.atomicCoinReserved, s.coinToAtomic, s.distances, suite)
 	case "Propagate":
 		return s.mypi(n)
 	default:
@@ -201,7 +203,10 @@ func (s *Service) NewProtocol(n *onet.TreeNodeInstance, conf *onet.GenericConfig
 func (s *Service) Setup(args *SetupArgs) (*VoidReply, error) {
 	lc := gentree.LocalityContext{}
 
-	lc.Setup(args.Roster, "../../nodeGen/nodes.txt")
+	crt, _ := os.Getwd()
+	log.LLvl1(crt)
+	//lc.Setup(args.Roster, "../../nodeGen/nodes.txt")
+	lc.Setup(args.Roster, "../nodeGen/nodes.txt")
 	s.Lc = lc
 
 	// We store every tree this node is a part of in s.trees, as well as the different roots's ID's of those trees in s.rootsIDs
@@ -250,9 +255,11 @@ func (s *Service) GenesisTx(args *GenesisArgs) (*VoidReply, error) {
 		// Store as last transaction in the LastTx bucket for every TreeID
 		b = bboltTx.Bucket(s.bucketNameLastTx)
 		for id := range s.trees {
-			// Initialize the corresponding mutex
+			// Initialize the index of the atomic int, and the atomic int itself
 			set := s.treeIDSToSets[id]
-			s.mutexs[string(set)+string(args.CoinID)] = &sync.Mutex{}
+			s.coinToAtomic[string(set)+string(args.CoinID)] = len(s.atomicCoinReserved)
+			s.atomicCoinReserved = append(s.atomicCoinReserved, 0)
+
 			// Store as last Tx
 			err = b.Put(append(set, args.CoinID...), args.ID)
 			if err != nil {
@@ -318,6 +325,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 			pi.Start()
 			// Send signatures one by one after the initialization
 			sign := <-pi.(*simpleblscosi.SimpleBLSCoSi).FinalSignature
+
 			err = pi.(*simpleblscosi.SimpleBLSCoSi).Problem
 			if err != nil {
 				problem = err
@@ -328,6 +336,13 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 					Tx:        tx,
 					Signature: sign,
 					TreeID:    tree.ID,
+				}
+
+				// check final signature
+				err = s.checkBeforePropagation(data)
+				if err != nil {
+					problem = err
+					return
 				}
 
 				// Only propagate to that specific tree
@@ -354,6 +369,33 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 		Message:    args.Message,
 	}, nil
 }
+
+
+func (s *Service) checkBeforePropagation(data *PropagateData) error{
+	txEncoded, err := protobuf.Encode(&data.Tx)
+	if err != nil {
+		log.Error(err)
+	}
+	sha := sha256.New()
+	sha.Write(txEncoded)
+
+
+	// First check that Tx is valid with the vf
+	err = s.vf(txEncoded, data.TreeID)
+	if err != nil {
+		return err
+	}
+
+	// Then check the aggregate signature
+	suite := pairing.NewSuiteBn256()
+	err = bls.Verify(suite, s.trees[data.TreeID].Root.AggregatePublic(suite), txEncoded, data.Signature)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 
 // propagateHandler receives a *PropagateData. It stores the transaction and its aggregate signatures in the "Tx"
 // bucket, and tracks the last transaction for each coin and set in the "LastTx" bucket.
@@ -392,15 +434,18 @@ func (s *Service) propagateHandler(msg network.Message) {
 
 		// Non-initialization : we received a new aggregate structure that we need to store.
 		set := s.treeIDSToSets[data.TreeID]
-		defer s.mutexs[string(set)+string(data.Tx.Inner.CoinID)].Unlock()
+		//defer s.atomicCoinReserved[string(set)+string(data.Tx.Inner.CoinID)].Unlock()
+
 
 		// First check that Tx is valid with the vf
+		// should pass because we also check before propagation
 		err = s.vf(txEncoded, data.TreeID)
 		if err != nil {
 			return err
 		}
 
 		// Then check the aggregate signature
+		// should pass because we also check before propagation
 		suite := pairing.NewSuiteBn256()
 		err = bls.Verify(suite, s.trees[data.TreeID].Root.AggregatePublic(suite), txEncoded, data.Signature)
 		if err != nil {
@@ -444,6 +489,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 		}
 		return nil
 	})
+
 	if err != nil {
 		log.Error(err)
 	}
@@ -484,7 +530,8 @@ func newService(c *onet.Context) (onet.Service, error) {
 		return nil, err
 	}
 	s.trees = make(map[onet.TreeID]*onet.Tree)
-	s.mutexs = make(map[string]*sync.Mutex)
+	s.coinToAtomic = make(map[string]int)
+	s.atomicCoinReserved = make([]int32,0)
 
 	db, bucketNameTx := s.GetAdditionalBucket([]byte("Tx"))
 	_, bucketNameLastTx := s.GetAdditionalBucket([]byte("LastTx"))

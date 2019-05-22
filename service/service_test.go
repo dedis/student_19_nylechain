@@ -92,10 +92,11 @@ func TestTreesBLSCoSi(t *testing.T) {
 
 	PvK0, PbK0 := bls.NewKeyPair(testSuite, random.New())
 	_, PbK1 := bls.NewKeyPair(testSuite, random.New())
+	_, PbK2 := bls.NewKeyPair(testSuite, random.New())
+
 	PubK0, _ := PbK0.MarshalBinary()
 	PubK1, _ := PbK1.MarshalBinary()
-	PubK2, _ := PbK1.MarshalBinary()
-	//_, PubK2 := bls.NewKeyPair(testSuite, random.New())
+	PubK2, _ := PbK2.MarshalBinary()
 	iD0 := []byte("Genesis0")
 	iD1 := []byte("Genesis1")
 	coinID := []byte("0")
@@ -153,6 +154,7 @@ func TestTreesBLSCoSi(t *testing.T) {
 
 	// Alternative first Tx of coin 0 sending to PubK2 instead of PubK1
 
+
 	innerAlt := transaction.InnerTx{
 		CoinID:     coinID,
 		PreviousTx: iD0,
@@ -206,16 +208,29 @@ func TestTreesBLSCoSi(t *testing.T) {
 
 					w.Done()
 				}()
+
 				// Double spending attempt
+
 				_, err := service.TreesBLSCoSi(&CoSiTrees{
 					Message: txEncodedAlt,
 				})
 				w.Wait()
-				//log.LLvl1(err0)
-				//log.LLvl1(err)
+				if err0 != nil {
+					log.LLvl1("Error for txn1", err0)
+				} else {
+					log.LLvl1("txn1  accepted")
+				}
+				if err != nil {
+					log.LLvl1("Error for txn2", err)
+				} else {
+					log.LLvl1("txn2  accepted")
+				}
+
 				if err0 == nil && err == nil {
 					log.Fatal("Double spending accepted")
 				}
+				//w.Wait()
+				//log.LLvl1(err0)
 
 				// Second valid Tx
 				/*_, err = service.TreesBLSCoSi(&CoSiTrees{

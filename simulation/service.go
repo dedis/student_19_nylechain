@@ -80,7 +80,7 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	serverIDS := config.Roster.List
 	lc := gentree.LocalityContext{}
 	crt, _ := os.Getwd()
-	log.LLvl1(crt)
+	log.LLvl1("!!!!!!!!!!!!!!!!!!!", crt)
 	lc.Setup(config.Roster, "../../nodeGen/nodes.txt")
 
 	log.LLvl1("after")
