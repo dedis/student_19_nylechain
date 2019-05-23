@@ -81,7 +81,12 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	lc := gentree.LocalityContext{}
 	crt, _ := os.Getwd()
 	log.LLvl1("!!!!!!!!!!!!!!!!!!!", crt)
+
+	// TODO path to use when running simulation test
 	lc.Setup(config.Roster, "../../nodeGen/nodes.txt")
+
+	// TODO path to use when running api test
+	// lc.Setup(config.Roster, "nodeGen/nodes.txt")
 
 	log.LLvl1("after")
 

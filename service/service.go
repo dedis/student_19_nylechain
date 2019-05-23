@@ -205,8 +205,15 @@ func (s *Service) Setup(args *SetupArgs) (*VoidReply, error) {
 
 	crt, _ := os.Getwd()
 	log.LLvl1(crt)
-	//lc.Setup(args.Roster, "../../nodeGen/nodes.txt")
+	// TODO use when calling simulation test
+	// lc.Setup(args.Roster, "../../nodeGen/nodes.txt")
+
+	// TODO path to use when running api test
+	// lc.Setup(args.Roster, "nodeGen/nodes.txt")
+
+	// TODO path to use when running service test
 	lc.Setup(args.Roster, "../nodeGen/nodes.txt")
+
 	s.Lc = lc
 
 	// We store every tree this node is a part of in s.trees, as well as the different roots's ID's of those trees in s.rootsIDs
