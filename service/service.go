@@ -10,8 +10,9 @@ import (
 	"crypto/sha256"
 	"errors"
 	"math"
-	"os"
+	_ "os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dedis/student_19_nylechain/gentree"
@@ -70,7 +71,7 @@ type Service struct {
 	treeIDSToSets map[onet.TreeID][]byte
 
 	// Keys are concatenations of SetOfNodes + CoinID
-	coinToAtomic map[string]int
+	coinToAtomic       map[string]int
 	atomicCoinReserved []int32
 
 	db *bbolt.DB
@@ -198,21 +199,20 @@ func (s *Service) NewProtocol(n *onet.TreeNodeInstance, conf *onet.GenericConfig
 	}
 }
 
-
 // Setup stores the ordered slice of Server Identities, the translations from Trees to Sets of nodes and the distances between servers.
 func (s *Service) Setup(args *SetupArgs) (*VoidReply, error) {
 	lc := gentree.LocalityContext{}
 
-	crt, _ := os.Getwd()
-	log.LLvl1(crt)
+	//crt, _ := os.Getwd()
+	//log.LLvl1(crt)
 	// TODO use when calling simulation test
 	// lc.Setup(args.Roster, "../../nodeGen/nodes.txt")
 
 	// TODO path to use when running api test
-	// lc.Setup(args.Roster, "nodeGen/nodes.txt")
+	lc.Setup(args.Roster, "nodeGen/nodes.txt")
 
 	// TODO path to use when running service test
-	lc.Setup(args.Roster, "../nodeGen/nodes.txt")
+	//lc.Setup(args.Roster, "../nodeGen/nodes.txt")
 
 	s.Lc = lc
 
@@ -285,14 +285,14 @@ func (s *Service) GenesisTx(args *GenesisArgs) (*VoidReply, error) {
 // this function themselves for the same Tx.
 // The signatures returned are ordered like the corresponding trees.
 func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
-	log.LLvl1(s.ServerIdentity())
+	// log.LLvl1(s.ServerIdentity())
 	if args.Transmit {
 		coSiTree := &CoSiTrees{
-			Message:  args.Message,
+			Message: args.Message,
 			// We don't want infinite loops
 			Transmit: false,
 		}
-		
+
 		for _, ID := range s.rootsIDs {
 			s.SendRaw(ID, coSiTree)
 		}
@@ -366,7 +366,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 		}(i, tree)
 	}
 	wg.Wait()
-	
+
 	// TODO: make sure the errors from the propagation handler are stored in problem, so that they're visible
 	//  outside this "TreesBLSCosi" function, which means the txn did not successfully complete
 	if problem != nil {
@@ -384,15 +384,13 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	}, nil
 }
 
-
-func (s *Service) checkBeforePropagation(data *PropagateData) error{
+func (s *Service) checkBeforePropagation(data *PropagateData) error {
 	txEncoded, err := protobuf.Encode(&data.Tx)
 	if err != nil {
 		log.Error(err)
 	}
 	sha := sha256.New()
 	sha.Write(txEncoded)
-
 
 	// First check that Tx is valid with the vf
 	err = s.vf(txEncoded, data.TreeID)
@@ -409,7 +407,6 @@ func (s *Service) checkBeforePropagation(data *PropagateData) error{
 
 	return nil
 }
-
 
 // propagateHandler receives a *PropagateData. It stores the transaction and its aggregate signatures in the "Tx"
 // bucket, and tracks the last transaction for each coin and set in the "LastTx" bucket.
@@ -449,7 +446,9 @@ func (s *Service) propagateHandler(msg network.Message) {
 		// Non-initialization : we received a new aggregate structure that we need to store.
 		set := s.treeIDSToSets[data.TreeID]
 		//defer s.atomicCoinReserved[string(set)+string(data.Tx.Inner.CoinID)].Unlock()
-
+		key := string(set) + string(data.Tx.Inner.CoinID)
+		resourceIdx := s.coinToAtomic[key]
+		defer atomic.CompareAndSwapInt32(&(s.atomicCoinReserved[resourceIdx]), 1, 0)
 
 		// First check that Tx is valid with the vf
 		// should pass because we also check before propagation
@@ -503,6 +502,8 @@ func (s *Service) propagateHandler(msg network.Message) {
 		}
 		return nil
 	})
+	//log.LLvl1(s.ServerIdentity())
+	//log.LLvl1(s.db.AllocSize)
 
 	if err != nil {
 		log.Error(err)
@@ -545,7 +546,7 @@ func newService(c *onet.Context) (onet.Service, error) {
 	}
 	s.trees = make(map[onet.TreeID]*onet.Tree)
 	s.coinToAtomic = make(map[string]int)
-	s.atomicCoinReserved = make([]int32,0)
+	s.atomicCoinReserved = make([]int32, 0)
 
 	db, bucketNameTx := s.GetAdditionalBucket([]byte("Tx"))
 	_, bucketNameLastTx := s.GetAdditionalBucket([]byte("LastTx"))
@@ -565,12 +566,6 @@ func CreateMatrixOfDistances(serverIDs []*network.ServerIdentity, lcNodes gentre
 			oNode := lcNodes.GetByName(lcNodes.GetServerIdentityToName(outerID))
 			iNode := lcNodes.GetByName(lcNodes.GetServerIdentityToName(innerID))
 			innerMap[innerID.String()] = lcNodes.ClusterBunchDistances[oNode][iNode]
-			if lcNodes.ClusterBunchDistances[oNode][iNode] > 1000 {
-				log.LLvl1(oNode.Name)
-				log.LLvl1(iNode.Name)
-				log.LLvl1(lcNodes.ClusterBunchDistances[oNode][iNode])
-				log.LLvl1("---")
-			}
 		}
 		outerMap[outerID.String()] = innerMap
 	}

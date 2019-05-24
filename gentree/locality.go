@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -67,8 +68,7 @@ func (s *LocalityContext) Setup(roster *onet.Roster, nodesFile string) {
 		s.Nodes.ClusterBunchDistances[node] = make(map[*LocalityNode]float64)
 		s.Nodes.Links[node] = make(map[*LocalityNode]map[*LocalityNode]bool)
 		for _, node2 := range s.Nodes.All {
-			// Change here, default distance is only 500
-			s.Nodes.ClusterBunchDistances[node][node2] = float64(500)
+			s.Nodes.ClusterBunchDistances[node][node2] = math.MaxFloat64
 			s.Nodes.Links[node][node2] = make(map[*LocalityNode]bool)
 
 			if node == node2 {

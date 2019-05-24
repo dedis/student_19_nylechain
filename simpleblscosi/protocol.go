@@ -427,6 +427,10 @@ func (c *SimpleBLSCoSi) handleShutdown(shutdown *Shutdown) error {
 	c.atomicCoinReserved[key].Unlock()
 	*/
 
+	key := string(c.set) + string(tx.Inner.CoinID)
+	resourceIdx := c.coinToAtomic[key]
+	atomic.CompareAndSwapInt32(&(c.atomicCoinReserved[resourceIdx]), 1, 0)
+
 	if !c.IsLeaf() {
 		for _, child := range c.Children() {
 			dist := c.distances[c.ServerIdentity().String()][child.ServerIdentity.String()]
@@ -475,6 +479,6 @@ func prepareRepliesToSigs(replies []*SimplePrepareReply, usePosReplies bool) [][
 			}
 		}
 	}
-	log.LLvl1("len is", len(sigs))
+	//log.LLvl1("len is", len(sigs))
 	return sigs
 }

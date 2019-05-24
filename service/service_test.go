@@ -238,8 +238,6 @@ func TestTreesBLSCoSi(t *testing.T) {
 					Message: txEncoded02,
 				})*/
 				//log.LLvl1(err)
-			} else {
-				log.LLvl1("0 TREE")
 			}
 			wg.Done()
 		}(server)

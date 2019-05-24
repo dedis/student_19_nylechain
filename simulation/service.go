@@ -13,7 +13,7 @@ import (
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/log"
 	_ "go.dedis.ch/onet/v3/simul/monitor"
-	"os"
+	_ "os"
 )
 
 /*
@@ -79,8 +79,8 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	var fullTreeSlice []*onet.Tree
 	serverIDS := config.Roster.List
 	lc := gentree.LocalityContext{}
-	crt, _ := os.Getwd()
-	log.LLvl1("!!!!!!!!!!!!!!!!!!!", crt)
+	//crt, _ := os.Getwd()
+	//log.LLvl1("!!!!!!!!!!!!!!!!!!!", crt)
 
 	// TODO path to use when running simulation test
 	lc.Setup(config.Roster, "../../nodeGen/nodes.txt")
@@ -135,11 +135,7 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 		Signature: signature,
 	}
 	txEncoded, _ := protobuf.Encode(&tx)
-	treeIDs := make([]onet.TreeID, 1)
-	treeIDs[0] = lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(serverIDS[0])][1].ID
-	reply, err0 := c.TreesBLSCoSi(serverIDS[0], txEncoded)
+	_, err0 := c.TreesBLSCoSi(serverIDS[0], txEncoded)
 	log.ErrFatal(err0)
-	log.LLvl1(reply)
-
 	return nil
 }

@@ -1,7 +1,8 @@
 package nylechain
 
 import (
-	"sync"
+	"crypto/sha256"
+	_ "sync"
 	"testing"
 
 	"go.dedis.ch/onet/v3/network"
@@ -56,7 +57,7 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 	// Genesis of 2 different coins
 
 	PvK0, PbK0 := bls.NewKeyPair(testSuite, random.New())
-	_, PbK1 := bls.NewKeyPair(testSuite, random.New())
+	PvK1, PbK1 := bls.NewKeyPair(testSuite, random.New())
 	_, PbK2 := bls.NewKeyPair(testSuite, random.New())
 	PubK0, _ := PbK0.MarshalBinary()
 	PubK1, _ := PbK1.MarshalBinary()
@@ -89,7 +90,7 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 
 	// Second transaction
 
-	/*sha := sha256.New()
+	sha := sha256.New()
 	sha.Write(txEncoded)
 	iD01 := sha.Sum(nil)
 	inner02 := transaction.InnerTx{
@@ -99,12 +100,12 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 		ReceiverPK: PubK2,
 	}
 	innerEncoded02, _ := protobuf.Encode(&inner02)
-	signature02, _ := bls.Sign(testSuite, PrivK1, innerEncoded02)
+	signature02, _ := bls.Sign(testSuite, PvK1, innerEncoded02)
 	tx02 := transaction.Tx{
 		Inner:     inner02,
 		Signature: signature02,
 	}
-	txEncoded02, _ := protobuf.Encode(&tx02)*/
+	txEncoded02, _ := protobuf.Encode(&tx02)
 
 	// First transaction of the second coin
 
@@ -124,7 +125,7 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 
 	// Alternative first Tx of coin 0 sending to PubK2 instead of PubK1
 
-	innerAlt := transaction.InnerTx{
+	/*innerAlt := transaction.InnerTx{
 		CoinID:     coinID,
 		PreviousTx: iD0,
 		SenderPK:   PubK0,
@@ -136,13 +137,13 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 		Inner:     innerAlt,
 		Signature: signatureAlt,
 	}
-	txEncodedAlt, _ := protobuf.Encode(&txAlt)
+	txEncodedAlt, _ := protobuf.Encode(&txAlt)*/
 
-	var wg sync.WaitGroup
+	/*var wg sync.WaitGroup
 	n := len(servers[:3])
-	wg.Add(n)
-	for _, server := range servers[:3] {
-		go func(server *onet.Server) {
+	wg.Add(n)*/
+	for _, server := range servers[:1] {
+		//go func(server *onet.Server) {
 			// I exclude the first tree of every slice since it only contains one node
 			trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)][1:]
 			/*for _, tree := range trees {
@@ -153,13 +154,13 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 			}*/
 			if len(trees) > 0 {
 				// First valid Tx
-				var w sync.WaitGroup
+				/*var w sync.WaitGroup
 				w.Add(1)
-				var err0 error
-				go func() {
-					_, err0 = c.TreesBLSCoSi(server.ServerIdentity, txEncoded)
-
-					w.Done()
+				 var err0 error
+				go func() {*/
+					_, err := c.TreesBLSCoSi(server.ServerIdentity, txEncoded)
+					log.LLvl1(err)
+					/*w.Done()
 				}()
 				// Double spending attempt
 				_, err := c.TreesBLSCoSi(server.ServerIdentity, txEncodedAlt)
@@ -168,16 +169,16 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 				log.LLvl1(err)
 				if err0 == nil && err == nil {
 					log.Fatal("Double spending accepted")
-				}
+				}*/
 
 				// Second valid Tx
-				//_, err = c.TreesBLSCoSi(server.ServerIdentity, treeIDs, )
-				//log.LLvl1(err)
+				_, err = c.TreesBLSCoSi(server.ServerIdentity, txEncoded02)
+				log.LLvl1(err)
 			}
-			wg.Done()
-		}(server)
+			//wg.Done()
+		//}(server)
 	}
 
-	wg.Wait()
+	//wg.Wait()
 
 }
