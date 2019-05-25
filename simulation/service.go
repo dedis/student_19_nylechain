@@ -135,7 +135,7 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 		Signature: signature,
 	}
 	txEncoded, _ := protobuf.Encode(&tx)
-	_, err0 := c.TreesBLSCoSi(serverIDS[0], txEncoded)
+	_, err0 := c.TreesBLSCoSi(serverIDS[44], txEncoded)
 	log.ErrFatal(err0)
 	return nil
 }

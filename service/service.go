@@ -10,7 +10,6 @@ import (
 	"crypto/sha256"
 	"errors"
 	"math"
-	_ "os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -425,7 +424,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 	sha := sha256.New()
 	sha.Write(txEncoded)
 	h := sha.Sum(nil)
-	log.LLvl1(len(s.trees), s.db.Stats().TxStats.PageCount)
+	log.LLvl1(len(s.trees), s.db.Stats().TxStats.PageAlloc)
 	err = s.db.Update(func(bboltTx *bbolt.Tx) error {
 		b := bboltTx.Bucket(s.bucketNameTx)
 		v := b.Get(h)
@@ -512,7 +511,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 		}
 		return nil
 	})
-	log.LLvl1(len(s.trees), s.db.Stats().TxStats.PageCount)
+	log.LLvl1(len(s.trees), s.db.Stats().TxStats.PageAlloc)
 
 	if err != nil {
 		log.Error(err)

@@ -142,7 +142,7 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 	/*var wg sync.WaitGroup
 	n := len(servers[:3])
 	wg.Add(n)*/
-	for _, server := range servers[:1] {
+	for _, server := range servers[44:] {
 		//go func(server *onet.Server) {
 			// I exclude the first tree of every slice since it only contains one node
 			trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)][1:]
