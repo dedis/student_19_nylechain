@@ -80,7 +80,7 @@ type Service struct {
 	bucketNameTx []byte
 
 	// Stores the last Tx, hashed (its key in the first bucket) for each node set and CoinID,
-	// keyed to a concatenation of SetOfNodes + CoinID
+	// keyed to a concatenation of hash(SetOfNodes) + CoinID
 	bucketNameLastTx []byte
 
 	propagateF propagate.PropagationFunc
@@ -111,7 +111,9 @@ func (s *Service) vf(msg []byte, id onet.TreeID) error {
 		b := bboltTx.Bucket(s.bucketNameLastTx)
 		// Get the set of that TreeID's Tree
 		set := s.treeIDSToSets[id]
-		v := b.Get(append(set, tx.Inner.CoinID...))
+		sha := sha256.New()
+		sha.Write(set)
+		v := b.Get(append(sha.Sum(nil), tx.Inner.CoinID...))
 		if bytes.Compare(v, tx.Inner.PreviousTx) != 0 {
 			return errors.New("The previous transaction is not the last of the chain")
 		}
@@ -264,11 +266,13 @@ func (s *Service) GenesisTx(args *GenesisArgs) (*VoidReply, error) {
 		for id := range s.trees {
 			// Initialize the index of the atomic int, and the atomic int itself
 			set := s.treeIDSToSets[id]
+			sha := sha256.New()
+			sha.Write(set)
 			s.coinToAtomic[string(set)+string(args.CoinID)] = len(s.atomicCoinReserved)
 			s.atomicCoinReserved = append(s.atomicCoinReserved, 0)
 
 			// Store as last Tx
-			err = b.Put(append(set, args.CoinID...), args.ID)
+			err = b.Put(append(sha.Sum(nil), args.CoinID...), args.ID)
 			if err != nil {
 				return err
 			}
@@ -412,8 +416,8 @@ func (s *Service) checkBeforePropagation(data *PropagateData) error {
 // bucket, and tracks the last transaction for each coin and set in the "LastTx" bucket.
 func (s *Service) propagateHandler(msg network.Message) {
 	data := msg.(*PropagateData)
-	dist := s.distances[s.ServerIdentity().String()][data.ServerID]
-	time.Sleep(time.Duration(dist) * time.Millisecond)
+	//dist := s.distances[s.ServerIdentity().String()][data.ServerID]
+	//time.Sleep(time.Duration(dist) * time.Millisecond)
 	txEncoded, err := protobuf.Encode(&data.Tx)
 	if err != nil {
 		log.Error(err)
@@ -421,7 +425,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 	sha := sha256.New()
 	sha.Write(txEncoded)
 	h := sha.Sum(nil)
-
+	log.LLvl1(len(s.trees), s.db.Stats().TxStats.PageCount)
 	err = s.db.Update(func(bboltTx *bbolt.Tx) error {
 		b := bboltTx.Bucket(s.bucketNameTx)
 		v := b.Get(h)
@@ -445,6 +449,8 @@ func (s *Service) propagateHandler(msg network.Message) {
 
 		// Non-initialization : we received a new aggregate structure that we need to store.
 		set := s.treeIDSToSets[data.TreeID]
+		sha := sha256.New()
+		sha.Write(set)
 		//defer s.atomicCoinReserved[string(set)+string(data.Tx.Inner.CoinID)].Unlock()
 		key := string(set) + string(data.Tx.Inner.CoinID)
 		resourceIdx := s.coinToAtomic[key]
@@ -482,11 +488,13 @@ func (s *Service) propagateHandler(msg network.Message) {
 		}
 		// Update LastTx bucket too
 		b = bboltTx.Bucket(s.bucketNameLastTx)
+
 		// Register as LastTx for this tree's set
-		err = b.Put(append(set, data.Tx.Inner.CoinID...), h)
+		err = b.Put(append(sha.Sum(nil), data.Tx.Inner.CoinID...), h)
 		if err != nil {
 			return err
 		}
+
 		// Register as LastTx for every subset of this tree's set
 		for id := range s.trees {
 			isSubset, err := s.IsSubSetOfNodes(data.TreeID, id)
@@ -494,7 +502,9 @@ func (s *Service) propagateHandler(msg network.Message) {
 				return err
 			}
 			if isSubset {
-				err = b.Put(append(s.treeIDSToSets[id], data.Tx.Inner.CoinID...), h)
+				sha0 := sha256.New()
+				sha0.Write(s.treeIDSToSets[id])
+				err = b.Put(append(sha0.Sum(nil), data.Tx.Inner.CoinID...), h)
 				if err != nil {
 					return err
 				}
@@ -502,8 +512,7 @@ func (s *Service) propagateHandler(msg network.Message) {
 		}
 		return nil
 	})
-	//log.LLvl1(s.ServerIdentity())
-	//log.LLvl1(s.db.AllocSize)
+	log.LLvl1(len(s.trees), s.db.Stats().TxStats.PageCount)
 
 	if err != nil {
 		log.Error(err)
@@ -565,7 +574,7 @@ func CreateMatrixOfDistances(serverIDs []*network.ServerIdentity, lcNodes gentre
 		for _, innerID := range serverIDs {
 			oNode := lcNodes.GetByName(lcNodes.GetServerIdentityToName(outerID))
 			iNode := lcNodes.GetByName(lcNodes.GetServerIdentityToName(innerID))
-			innerMap[innerID.String()] = lcNodes.ClusterBunchDistances[oNode][iNode]
+			innerMap[innerID.String()] = lcNodes.Distances[oNode][iNode]
 		}
 		outerMap[outerID.String()] = innerMap
 	}

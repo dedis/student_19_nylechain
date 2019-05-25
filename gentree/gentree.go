@@ -6,10 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/satori/go.uuid"
-	"go.dedis.ch/onet/v3"
-	"go.dedis.ch/onet/v3/log"
-	"go.dedis.ch/onet/v3/network"
 	"math"
 	"math/rand"
 	"os"
@@ -17,6 +13,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	uuid "github.com/satori/go.uuid"
+	"go.dedis.ch/onet/v3"
+	"go.dedis.ch/onet/v3/log"
+	"go.dedis.ch/onet/v3/network"
 )
 
 // TreeConverter is a structure for converting between a recursive tree (graph)
@@ -58,6 +59,7 @@ type LocalityNodes struct {
 	All                   []*LocalityNode
 	ServerIdentityToName  map[network.ServerIdentityID]string
 	ClusterBunchDistances map[*LocalityNode]map[*LocalityNode]float64
+	Distances             map[*LocalityNode]map[*LocalityNode]float64
 	Links                 map[*LocalityNode]map[*LocalityNode]map[*LocalityNode]bool
 }
 
@@ -207,7 +209,6 @@ func CreateLocalityGraph(all LocalityNodes, randomCoords, randomLevels bool, lev
 		}
 	}
 
-
 	for _, n := range all.All {
 		log.Lvl3(n.Name, "cluster=", n.Cluster, "bunch=", n.Bunch)
 	}
@@ -247,7 +248,7 @@ func CreateLocalityGraph(all LocalityNodes, randomCoords, randomLevels bool, lev
 
 }
 
-	//Checks if a Node is suitable to be another Node's bunch depending on its distance to it
+//Checks if a Node is suitable to be another Node's bunch depending on its distance to it
 func checkDistance(distance float64, lvl int, lvls int, Adist []float64) bool {
 
 	for i := lvl + 1; i < lvls; i++ {
@@ -341,7 +342,6 @@ func GenerateRadius(maxDist float64) []float64 {
 
 	//radiuses = []float64{10000.0}
 
-
 	//radiuses = []float64{20.0, 50.0, 100.0, 300.0, 500.0, 10000.0}
 	//--->radiuses = []float64{15.0, 100.0, 10000.0}
 
@@ -352,7 +352,6 @@ func GenerateRadius(maxDist float64) []float64 {
 	//radiuses = []float64{30.0, 300, 10000.0}
 
 	//log.LLvl1(radiuses)
-
 
 	return radiuses
 }
@@ -765,11 +764,11 @@ func CreateOnetRings(all LocalityNodes, rootName string, dist2 map[*LocalityNode
 	//Distance between nodes after Optimisation
 
 	/*
-	var Links map[*LocalityNode]map[*LocalityNode]map[*LocalityNode]bool
-	Dist2, _ := AproximateDistanceOracle(all)
+		var Links map[*LocalityNode]map[*LocalityNode]map[*LocalityNode]bool
+		Dist2, _ := AproximateDistanceOracle(all)
 
-	//Returns maps of link nodes between two nodes ([NodeA][NodeB][NodeC]Returns True if NodeC is a link between NodeA and NodeB )
-	_, Links = AproximateDistanceOracle(all)
+		//Returns maps of link nodes between two nodes ([NodeA][NodeB][NodeC]Returns True if NodeC is a link between NodeA and NodeB )
+		_, Links = AproximateDistanceOracle(all)
 	*/
 
 	prevRosterLen := 0
@@ -872,7 +871,6 @@ func CreateOnetRings(all LocalityNodes, rootName string, dist2 map[*LocalityNode
 
 		//Computes Final Roster
 
-
 		// deterministic roster order
 		// the roster order does not affect the locality graph, because the locality graph is built using Parents
 		if len(roster) > 1 {
@@ -894,7 +892,7 @@ func CreateOnetRings(all LocalityNodes, rootName string, dist2 map[*LocalityNode
 				if i == 0 {
 					continue
 				}
-				roster[i] = rosterAux[i - 1]
+				roster[i] = rosterAux[i-1]
 			}
 		}
 
@@ -912,7 +910,6 @@ func CreateOnetRings(all LocalityNodes, rootName string, dist2 map[*LocalityNode
 		prevRosterLen = len(finalRoster.List)
 
 		//log.LLvl1(finalRoster)
-
 
 		//Hashing
 		h := sha256.New()
@@ -948,8 +945,6 @@ func CreateOnetRings(all LocalityNodes, rootName string, dist2 map[*LocalityNode
 		Lists = append(Lists, list)
 		Trees = append(Trees, t)
 		Parents = append(Parents, parents)
-
-
 
 		if countt == len(radiuses) {
 			break

@@ -3,7 +3,6 @@ package simpleblscosi
 import (
 	"errors"
 	"sync/atomic"
-	"time"
 
 	"github.com/dedis/student_19_nylechain/transaction"
 	"go.dedis.ch/protobuf"
@@ -29,7 +28,7 @@ type SimpleBLSCoSi struct {
 	set []byte
 
 	// Keys are concatenations of TreeID + CoinID
-	coinToAtomic map[string]int
+	coinToAtomic       map[string]int
 	atomicCoinReserved []int32
 
 	// Distances between servers
@@ -61,7 +60,7 @@ func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, set []byte, ato
 		suite:              suite,
 		vf:                 vf,
 		set:                set,
-		coinToAtomic: 		coinToAtomic,
+		coinToAtomic:       coinToAtomic,
 		atomicCoinReserved: atomicCoinReserved,
 		distances:          distances,
 		done:               make(chan bool),
@@ -77,7 +76,7 @@ func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, set []byte, ato
 func (c *SimpleBLSCoSi) Dispatch() error {
 	nbrChild := len(c.Children())
 	if !c.IsRoot() {
-		log.Lvl2(c.ServerIdentity(), "waiting for prepare")
+		log.Lvl3(c.ServerIdentity(), "waiting for prepare")
 		prep := (<-c.prepare).SimplePrepare
 		err := c.handlePrepare(&prep)
 		if err != nil {
@@ -158,7 +157,7 @@ func (c *SimpleBLSCoSi) handlePrepare(in *SimplePrepare) error {
 	var err error
 
 	c.Message = in.Message
-	log.Lvlf2("%s prepare message: %x", c.ServerIdentity(), c.Message)
+	log.Lvlf3("%s prepare message: %x", c.ServerIdentity(), c.Message)
 
 	// if we are leaf, we should go to prepare-reply
 	if c.IsLeaf() {
@@ -167,8 +166,8 @@ func (c *SimpleBLSCoSi) handlePrepare(in *SimplePrepare) error {
 
 	// send to children
 	for _, child := range c.Children() {
-		dist := c.distances[c.ServerIdentity().String()][child.ServerIdentity.String()]
-		time.Sleep(time.Duration(dist) * time.Millisecond)
+		//dist := c.distances[c.ServerIdentity().String()][child.ServerIdentity.String()]
+		//time.Sleep(time.Duration(dist) * time.Millisecond)
 		err0 := c.SendTo(child, in)
 		if err != nil {
 			err = err0
@@ -182,8 +181,7 @@ func (c *SimpleBLSCoSi) handlePrepare(in *SimplePrepare) error {
 // It expects *in* to be the full set of messages from the children.
 // The children's commitment must remain constants.
 func (c *SimpleBLSCoSi) handlePrepareReplies(replies []*SimplePrepareReply) error {
-	log.Lvl2(c.ServerIdentity(), "aggregated")
-
+	log.Lvl3(c.ServerIdentity(), "aggregated")
 
 	// verify that txn signed by sender, last txn in the coin and holder is sender
 	if err := c.vf(c.Message, c.Tree().ID); err != nil {
@@ -207,11 +205,10 @@ func (c *SimpleBLSCoSi) handlePrepareReplies(replies []*SimplePrepareReply) erro
 	resourceIdx := c.coinToAtomic[key]
 	succeeded := atomic.CompareAndSwapInt32(&(c.atomicCoinReserved[resourceIdx]), 0, 1)
 
-
 	var posAggrSig, negAggrSig []byte
 	if !succeeded {
 		// resource occupied, send negative answer
-		log.Lvl2(c.ServerIdentity(), "sending to parent negative for", tx.Inner.ReceiverPK)
+		log.Lvl3(c.ServerIdentity(), "sending to parent negative for", tx.Inner.ReceiverPK)
 		sigs := prepareRepliesToSigs(replies, false)
 		if len(sigs) > 0 {
 			negAggrSig, err = bls.AggregateSignatures(c.suite, append(sigs, mySig)...)
@@ -228,7 +225,7 @@ func (c *SimpleBLSCoSi) handlePrepareReplies(replies []*SimplePrepareReply) erro
 			return err
 		}
 	} else {
-		log.Lvl2(c.ServerIdentity(), "sending to parent positive for", tx.Inner.ReceiverPK)
+		log.Lvl3(c.ServerIdentity(), "sending to parent positive for", tx.Inner.ReceiverPK)
 		sigs := prepareRepliesToSigs(replies, true)
 		if len(sigs) > 0 {
 			posAggrSig, err = bls.AggregateSignatures(c.suite, append(sigs, mySig)...)
@@ -236,7 +233,7 @@ func (c *SimpleBLSCoSi) handlePrepareReplies(replies []*SimplePrepareReply) erro
 				log.Error(c.ServerIdentity(), err)
 				return c.handleError(&TransmitError{Error: err.Error()})
 			}
-		}else {
+		} else {
 			posAggrSig = mySig
 		}
 
@@ -245,7 +242,6 @@ func (c *SimpleBLSCoSi) handlePrepareReplies(replies []*SimplePrepareReply) erro
 			return err
 		}
 	}
-
 
 	// combine the signatures from the replies
 
@@ -256,7 +252,7 @@ func (c *SimpleBLSCoSi) handlePrepareReplies(replies []*SimplePrepareReply) erro
 			PosAggrSig: posAggrSig,
 		}
 
-		log.Lvlf2("%s starting commit (message = %x)", c.ServerIdentity(), c.Message)
+		log.Lvlf3("%s starting commit (message = %x)", c.ServerIdentity(), c.Message)
 		return c.handleCommit(out)
 	}
 
@@ -267,10 +263,9 @@ func (c *SimpleBLSCoSi) handlePrepareReplies(replies []*SimplePrepareReply) erro
 		PosSig: posAggrSig,
 	}
 
-
-	dist := c.distances[c.ServerIdentity().String()][c.Parent().ServerIdentity.String()]
-	time.Sleep(time.Duration(dist) * time.Millisecond)
-	log.Lvlf2("%s sending to parent", c.ServerIdentity())
+	//dist := c.distances[c.ServerIdentity().String()][c.Parent().ServerIdentity.String()]
+	//time.Sleep(time.Duration(dist) * time.Millisecond)
+	log.Lvlf3("%s sending to parent", c.ServerIdentity())
 	return c.SendTo(c.Parent(), outMsg)
 }
 
@@ -281,7 +276,7 @@ func (c *SimpleBLSCoSi) handleCommit(in *SimpleCommit) error {
 	var err error
 	c.commitMsg = *in
 
-	log.Lvlf2("%s handling commit", c.ServerIdentity())
+	log.Lvlf3("%s handling commit", c.ServerIdentity())
 
 	// if we are leaf, then go to commitReply
 	if c.IsLeaf() {
@@ -290,8 +285,8 @@ func (c *SimpleBLSCoSi) handleCommit(in *SimpleCommit) error {
 
 	// otherwise send it to children
 	for _, child := range c.Children() {
-		dist := c.distances[c.ServerIdentity().String()][child.ServerIdentity.String()]
-		time.Sleep(time.Duration(dist) * time.Millisecond)
+		//dist := c.distances[c.ServerIdentity().String()][child.ServerIdentity.String()]
+		//time.Sleep(time.Duration(dist) * time.Millisecond)
 		err0 := c.SendTo(child, in)
 		if err != nil {
 			err = err0
@@ -317,10 +312,10 @@ func (c *SimpleBLSCoSi) handleCommitReplies(replies []*SimpleCommitReply) error 
 
 	// TODO check that I signed the coming prepare, use a mask
 	/*
-	if err := c.vf(c.Message, c.Tree().ID); err != nil {
-		return c.handleError(&TransmitError{Error: err.Error()})
-	}
-	 */
+		if err := c.vf(c.Message, c.Tree().ID); err != nil {
+			return c.handleError(&TransmitError{Error: err.Error()})
+		}
+	*/
 
 	var posAggrSig, negAggrSig []byte
 
@@ -334,7 +329,7 @@ func (c *SimpleBLSCoSi) handleCommitReplies(replies []*SimpleCommitReply) error 
 	pk := bls.AggregatePublicKeys(c.suite, c.Publics()...)
 	err = bls.Verify(c.suite, pk, c.Message, c.commitMsg.PosAggrSig)
 	if err != nil {
-		log.Error(c.ServerIdentity(), "positive commit verification failed with error: ", err.Error(), "for", tx.Inner.ReceiverPK )
+		log.Error(c.ServerIdentity(), "positive commit verification failed with error: ", err.Error(), "for", tx.Inner.ReceiverPK)
 
 		// TODO: handle the cases when the nr of positive sign + nr of negative sigs isn't 2f+1
 
@@ -387,13 +382,13 @@ func (c *SimpleBLSCoSi) handleCommitReplies(replies []*SimpleCommitReply) error 
 
 	// send it back to parent
 	if !c.IsRoot() {
-		dist := c.distances[c.ServerIdentity().String()][c.Parent().ServerIdentity.String()]
-		time.Sleep(time.Duration(dist) * time.Millisecond)
+		//dist := c.distances[c.ServerIdentity().String()][c.Parent().ServerIdentity.String()]
+		//time.Sleep(time.Duration(dist) * time.Millisecond)
 		return c.SendTo(c.Parent(), out)
 	}
 
 	// send it to the output channel
-	log.Lvl2(c.ServerIdentity(), "sending the final signature to channel")
+	log.Lvl3(c.ServerIdentity(), "sending the final signature to channel")
 	c.FinalSignature <- posAggrSig
 	return nil
 }
@@ -403,8 +398,8 @@ func (c *SimpleBLSCoSi) handleError(tErr *TransmitError) error {
 	if c.IsRoot() {
 		return c.handleShutdown(&Shutdown{Error: tErr.Error})
 	}
-	dist := c.distances[c.ServerIdentity().String()][c.Parent().ServerIdentity.String()]
-	time.Sleep(time.Duration(dist) * time.Millisecond)
+	//dist := c.distances[c.ServerIdentity().String()][c.Parent().ServerIdentity.String()]
+	//time.Sleep(time.Duration(dist) * time.Millisecond)
 	return c.SendTo(c.Parent(), &TransmitError{Error: tErr.Error})
 }
 
@@ -423,8 +418,8 @@ func (c *SimpleBLSCoSi) handleShutdown(shutdown *Shutdown) error {
 	}
 
 	/*
-	key := string(c.set) + string(tx.Inner.CoinID)
-	c.atomicCoinReserved[key].Unlock()
+		key := string(c.set) + string(tx.Inner.CoinID)
+		c.atomicCoinReserved[key].Unlock()
 	*/
 
 	key := string(c.set) + string(tx.Inner.CoinID)
@@ -433,8 +428,8 @@ func (c *SimpleBLSCoSi) handleShutdown(shutdown *Shutdown) error {
 
 	if !c.IsLeaf() {
 		for _, child := range c.Children() {
-			dist := c.distances[c.ServerIdentity().String()][child.ServerIdentity.String()]
-			time.Sleep(time.Duration(dist) * time.Millisecond)
+			//dist := c.distances[c.ServerIdentity().String()][child.ServerIdentity.String()]
+			//time.Sleep(time.Duration(dist) * time.Millisecond)
 			err0 := c.SendTo(child, shutdown)
 			if err != nil {
 				err = err0

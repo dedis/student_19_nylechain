@@ -88,6 +88,7 @@ func (s *LocalityContext) genTrees(RandomCoordsLevels bool, Levels int, Optimize
 	CreateLocalityGraph(s.Nodes, RandomCoordsLevels, RandomCoordsLevels, Levels, pingDist)
 
 	dist2 := AproximateDistanceOracle(s.Nodes)
+	s.Nodes.Distances = dist2
 
 	// we generate trees for all nodes
 	for _, crtRoot := range s.Nodes.All {
