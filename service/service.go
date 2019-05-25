@@ -295,7 +295,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 			// We don't want infinite loops
 			Transmit: false,
 		}
-
+		// TODO: SendRaw does not work yet
 		for _, ID := range s.rootsIDs {
 			s.SendRaw(ID, coSiTree)
 		}
@@ -424,7 +424,6 @@ func (s *Service) propagateHandler(msg network.Message) {
 	sha := sha256.New()
 	sha.Write(txEncoded)
 	h := sha.Sum(nil)
-	log.LLvl1(len(s.trees), s.db.Stats().TxStats.PageAlloc)
 	err = s.db.Update(func(bboltTx *bbolt.Tx) error {
 		b := bboltTx.Bucket(s.bucketNameTx)
 		v := b.Get(h)
@@ -511,7 +510,6 @@ func (s *Service) propagateHandler(msg network.Message) {
 		}
 		return nil
 	})
-	log.LLvl1(len(s.trees), s.db.Stats().TxStats.PageAlloc)
 
 	if err != nil {
 		log.Error(err)
@@ -532,6 +530,14 @@ func (s *Service) startPropagation(propagate propagate.PropagationFunc, tree *on
 	return nil
 }
 
+// MemoryAllocated sends the memory allocated and the number of trees the node is a part of to the client.
+func (s *Service) MemoryAllocated(req *MemoryRequest) (*MemoryReply, error) {
+	return &MemoryReply{
+		BytesAllocated: s.db.Stats().TxStats.PageAlloc,
+		NbrTrees:       len(s.trees),
+	}, nil
+}
+
 // newService receives the context that holds information about the node it's
 // running on. Saving and loading can be done using the context. The data will
 // be stored in memory for tests and simulations, and on disk for real deployments.
@@ -544,7 +550,7 @@ func newService(c *onet.Context) (onet.Service, error) {
 		return nil, err
 	}
 
-	if err := s.RegisterHandlers(s.GenesisTx, s.Setup, s.TreesBLSCoSi); err != nil {
+	if err := s.RegisterHandlers(s.GenesisTx, s.Setup, s.TreesBLSCoSi, s.MemoryAllocated); err != nil {
 		return nil, errors.New("Couldn't register messages")
 	}
 

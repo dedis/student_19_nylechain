@@ -1,8 +1,6 @@
 package nylechain
 
 import (
-	"sync"
-
 	"github.com/dedis/student_19_nylechain/service"
 	"go.dedis.ch/cothority/v3"
 	"go.dedis.ch/kyber/v3"
@@ -25,18 +23,12 @@ func (c *Client) Setup(roster *onet.Roster, translations map[onet.TreeID][]byte,
 		Translations: translations,
 		Distances:    distances,
 	}
-	var wg sync.WaitGroup
-	wg.Add(len(roster.List))
 	for _, si := range roster.List {
-		go func(si *network.ServerIdentity) {
-			err := c.SendProtobuf(si, sArgs, void)
-			if err != nil {
-				log.Fatal(err)
-			}
-			wg.Done()
-		}(si)
+		err := c.SendProtobuf(si, sArgs, void)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
-	wg.Wait()
 	return nil
 }
 
@@ -67,6 +59,23 @@ func (c *Client) TreesBLSCoSi(si *network.ServerIdentity, message []byte) (*serv
 		return nil, err
 	}
 	return reply, nil
+}
+
+// RequestMemoryAllocated takes multiple ServerIdentities as argument. Each of them replies with their bbolt memory allocated alongside
+// the number of trees they're a part of. The function then returns a map where the keys are the number of trees a node is a part of,
+// and the values are a slice of the different memories allocated in bytes for such nodes.
+func (c *Client) RequestMemoryAllocated(serverIDS []*network.ServerIdentity) (map[int][]int, error) {
+	request := &service.MemoryRequest{}
+	m := make(map[int][]int)
+	for _, id := range serverIDS {
+		reply := &service.MemoryReply{}
+		err := c.SendProtobuf(id, request, reply)
+		if err != nil {
+			return nil, err
+		}
+		m[reply.NbrTrees] = append(m[reply.NbrTrees], reply.BytesAllocated)
+	}
+	return m, nil
 }
 
 // NewClient instantiates a new template.Client

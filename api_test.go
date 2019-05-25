@@ -181,4 +181,7 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 
 	//wg.Wait()
 
+	reply ,_ := c.RequestMemoryAllocated(serverIDS)
+	log.LLvl1(reply)
+
 }

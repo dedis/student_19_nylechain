@@ -16,7 +16,8 @@ func init() {
 		CoSiTrees{}, CoSiReplyTrees{},
 		TxStorage{}, PropagateData{},
 		GenesisArgs{}, SetupArgs{},
-		VoidReply{},
+		VoidReply{}, MemoryRequest{},
+		MemoryReply{},
 	)
 }
 
@@ -45,11 +46,11 @@ type PropagateData struct {
 
 // CoSiTrees contains the encoded Tx.
 type CoSiTrees struct {
-	Message []byte
+	Message  []byte
 	Transmit bool
 }
 
-// CoSiReplyTrees returns the signatures and the original message
+// CoSiReplyTrees returns the signatures and the original message. Only used in testing
 type CoSiReplyTrees struct {
 	TreeIDS    []onet.TreeID
 	Signatures [][]byte
@@ -81,4 +82,13 @@ type GenesisArgs struct {
 type TxStorage struct {
 	Tx         transaction.Tx
 	Signatures [][]byte
+}
+
+// MemoryRequest is handled by service function MemoryAllocated
+type MemoryRequest struct{}
+
+// MemoryReply contains the memory allocated for a service as well as the number of trees this service is a part of
+type MemoryReply struct {
+	BytesAllocated int
+	NbrTrees       int
 }
