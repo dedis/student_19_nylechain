@@ -188,7 +188,11 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 
 	//wg.Wait()
 
-	reply, _ := c.RequestMemoryAllocated(serverIDS)
-	log.LLvl1(reply)
-
+	averageMemories, err := c.RequestMemoryAllocated(serverIDS)
+	log.ErrFatal(err)
+	for i := 1; i < 30; i++ {
+		if averageMemories[i] > 0 {
+			log.LLvl1(i, "trees : ", averageMemories[i])
+		}
+	}
 }

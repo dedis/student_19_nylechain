@@ -664,7 +664,7 @@ func GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
 	return reply, nil
 }
 
-// TxChain creates a sequence of encoded transactions of length n, where the public and private keys of the first sender,
+// TxChain creates a valid sequence of encoded transactions of length n, where the public and private keys of the first sender,
 // the address of the genesis coin and the CoinID are given.
 func TxChain(n int, pubK0 kyber.Point, privK0 kyber.Scalar, genesisID []byte, coinID []byte) ([][]byte, error) {
 	payload := make([]byte, 500)

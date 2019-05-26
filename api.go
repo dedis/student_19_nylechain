@@ -63,8 +63,8 @@ func (c *Client) TreesBLSCoSi(si *network.ServerIdentity, message []byte) (*serv
 
 // RequestMemoryAllocated takes multiple ServerIdentities as argument. Each of them replies with their bbolt memory allocated alongside
 // the number of trees they're a part of. The function then returns a map where the keys are the number of trees a node is a part of,
-// and the values are a slice of the different memories allocated in bytes for such nodes.
-func (c *Client) RequestMemoryAllocated(serverIDS []*network.ServerIdentity) (map[int][]int, error) {
+// and the values are the average memory allocated in bytes for such nodes.
+func (c *Client) RequestMemoryAllocated(serverIDS []*network.ServerIdentity) (map[int]int, error) {
 	request := &service.MemoryRequest{}
 	m := make(map[int][]int)
 	for _, id := range serverIDS {
@@ -75,7 +75,19 @@ func (c *Client) RequestMemoryAllocated(serverIDS []*network.ServerIdentity) (ma
 		}
 		m[reply.NbrTrees] = append(m[reply.NbrTrees], reply.BytesAllocated)
 	}
-	return m, nil
+
+	averageMemories := make(map[int]int)
+	for i, memories := range m {
+		if len(memories) > 0 {
+			var sum int
+			for _, memory := range memories {
+				sum += memory
+			}
+			averageMemories[i] = sum / len(memories)
+		}
+	}
+
+	return averageMemories, nil
 }
 
 // NewClient instantiates a new template.Client

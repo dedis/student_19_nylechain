@@ -1,19 +1,18 @@
 package main
 
 import (
+	_ "os"
+
 	"github.com/BurntSushi/toml"
-	"go.dedis.ch/protobuf"
 	nylechain "github.com/dedis/student_19_nylechain"
 	"github.com/dedis/student_19_nylechain/gentree"
 	"github.com/dedis/student_19_nylechain/service"
-	"github.com/dedis/student_19_nylechain/transaction"
 	"go.dedis.ch/kyber/v3/pairing"
 	"go.dedis.ch/kyber/v3/sign/bls"
 	"go.dedis.ch/kyber/v3/util/random"
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/log"
 	_ "go.dedis.ch/onet/v3/simul/monitor"
-	_ "os"
 )
 
 /*
@@ -62,9 +61,9 @@ func (s *SimulationService) Node(config *onet.SimulationConfig) error {
 	if index < 0 {
 		log.Fatal("Didn't find this node in roster")
 	}
-	
+
 	log.Lvl3("Initializing node-index", index)
-	
+
 	return s.SimulationBFTree.Node(config)
 }
 
@@ -101,24 +100,23 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 
 	translations := service.TreesToSetsOfNodes(fullTreeSlice, config.Roster.List)
 	err := c.Setup(config.Roster, translations, distances)
-	
 	log.ErrFatal(err)
 
 	// Genesis of 2 different coins
 	suite := pairing.NewSuiteBn256()
 	PvK0, PbK0 := bls.NewKeyPair(suite, random.New())
-	_, PbK1 := bls.NewKeyPair(suite, random.New())
+	/*_, PbK1 := bls.NewKeyPair(suite, random.New())
 	//_, PubK2 := bls.NewKeyPair(testSuite, random.New())
 	PubK0, _ := PbK0.MarshalBinary()
-	PubK1, _ := PbK1.MarshalBinary()
+	PubK1, _ := PbK1.MarshalBinary()*/
 	iD0 := []byte("Genesis0")
-	iD1 := []byte("Genesis1")
+	//iD1 := []byte("Genesis1")
 	coinID := []byte("0")
-	coinID1 := []byte("1")
+	//coinID1 := []byte("1")
 
 	err = c.GenesisTx(serverIDS, iD0, coinID, PbK0)
 	log.ErrFatal(err)
-	err = c.GenesisTx(serverIDS, iD1, coinID1, PbK0)
+	/*err = c.GenesisTx(serverIDS, iD1, coinID1, PbK0)
 	log.ErrFatal(err)
 
 	// First transaction
@@ -134,8 +132,19 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 		Inner:     inner,
 		Signature: signature,
 	}
-	txEncoded, _ := protobuf.Encode(&tx)
-	_, err0 := c.TreesBLSCoSi(serverIDS[44], txEncoded)
-	log.ErrFatal(err0)
+	txEncoded, _ := protobuf.Encode(&tx)*/
+	txs, err := service.TxChain(20, PbK0, PvK0, iD0, coinID)
+	log.ErrFatal(err)
+
+	for _, tx := range txs {
+		c.TreesBLSCoSi(serverIDS[44], tx)
+	}
+	averageMemories, err := c.RequestMemoryAllocated(serverIDS)
+	log.ErrFatal(err)
+	for i := 1; i < 30; i++ {
+		if averageMemories[i] > 0 {
+			log.LLvl1(i, "trees : ", averageMemories[i])
+		}
+	}
 	return nil
 }
