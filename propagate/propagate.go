@@ -62,7 +62,7 @@ type PropagateReply struct {
 type PropagationFunc func(tree *onet.Tree, msg network.Message, timeout time.Duration) (int, error)
 
 // PropagationStore is the function that will store the new data.
-type PropagationStore func(network.Message)
+type PropagationStore func(network.Message) error
 
 // propagationContext is used for testing.
 type propagationContext interface {

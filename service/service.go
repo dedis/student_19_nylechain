@@ -346,6 +346,7 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 					Tx:        tx,
 					Signature: sign,
 					TreeID:    tree.ID,
+					
 				}
 
 				// check final signature
@@ -360,7 +361,11 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 				//  so we don’t continue with the storage in case there’s a problem.
 
 				// Only propagate to that specific tree
-				s.startPropagation(s.propagateF, tree, data)
+				err = s.startPropagation(s.propagateF, tree, data)
+				if err != nil {
+					problem = err
+					return
+				}
 
 				// TODO: Check that the handler didn't encounter any errors beofre storing
 				treeIDS[i] = tree.ID
@@ -413,13 +418,13 @@ func (s *Service) checkBeforePropagation(data *PropagateData) error {
 
 // propagateHandler receives a *PropagateData. It stores the transaction and its aggregate signatures in the "Tx"
 // bucket, and tracks the last transaction for each coin and set in the "LastTx" bucket.
-func (s *Service) propagateHandler(msg network.Message) {
+func (s *Service) propagateHandler(msg network.Message) error {
 	data := msg.(*PropagateData)
 	//dist := s.distances[s.ServerIdentity().String()][data.ServerID]
 	//time.Sleep(time.Duration(dist) * time.Millisecond)
 	txEncoded, err := protobuf.Encode(&data.Tx)
 	if err != nil {
-		log.Error(err)
+		return err
 	}
 	sha := sha256.New()
 	sha.Write(txEncoded)
@@ -512,9 +517,9 @@ func (s *Service) propagateHandler(msg network.Message) {
 	})
 
 	if err != nil {
-		log.Error(err)
+		return err
 	}
-	return
+	return nil
 }
 
 func (s *Service) startPropagation(propagate propagate.PropagationFunc, tree *onet.Tree, msg network.Message) error {
@@ -569,6 +574,8 @@ func newService(c *onet.Context) (onet.Service, error) {
 	s.db = db
 	return s, nil
 }
+
+// General functions, not tied to service
 
 // CreateMatrixOfDistances takes a list of ServerIdentity and a LocalityNodes to create a map of maps where the two keys are
 // the ServerIdentity as strings and the value is the distance separating the two.
