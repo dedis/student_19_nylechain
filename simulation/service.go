@@ -133,7 +133,7 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 		Signature: signature,
 	}
 	txEncoded, _ := protobuf.Encode(&tx)*/
-	txs, err := service.TxChain(20, PbK0, PvK0, iD0, coinID)
+	txs, err := service.TxChain(1, PbK0, PvK0, iD0, coinID)
 	log.ErrFatal(err)
 
 	for _, tx := range txs {

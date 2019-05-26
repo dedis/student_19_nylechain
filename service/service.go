@@ -213,10 +213,10 @@ func (s *Service) Setup(args *SetupArgs) (*VoidReply, error) {
 	//crt, _ := os.Getwd()
 	//log.LLvl1(crt)
 	// TODO use when calling simulation test
-	// lc.Setup(args.Roster, "../../nodeGen/nodes.txt")
+	lc.Setup(args.Roster, "../../nodeGen/nodes.txt")
 
 	// TODO path to use when running api test
-	lc.Setup(args.Roster, "nodeGen/nodes.txt")
+	//lc.Setup(args.Roster, "nodeGen/nodes.txt")
 
 	// TODO path to use when running service test
 	//lc.Setup(args.Roster, "../nodeGen/nodes.txt")
@@ -425,8 +425,8 @@ func (s *Service) checkBeforePropagation(data *PropagateData) error {
 // bucket, and tracks the last transaction for each coin and set in the "LastTx" bucket.
 func (s *Service) propagateHandler(msg network.Message) error {
 	data := msg.(*PropagateData)
-	//dist := s.distances[s.ServerIdentity().String()][data.ServerID]
-	//time.Sleep(time.Duration(dist) * time.Millisecond)
+	dist := s.distances[s.ServerIdentity().String()][data.ServerID]
+	time.Sleep(time.Duration(dist)/10 * time.Millisecond)
 	txEncoded, err := protobuf.Encode(&data.Tx)
 	if err != nil {
 		return err
