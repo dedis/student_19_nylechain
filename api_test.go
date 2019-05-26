@@ -1,7 +1,6 @@
 package nylechain
 
 import (
-	"crypto/sha256"
 	_ "sync"
 	"testing"
 
@@ -9,10 +8,8 @@ import (
 
 	"go.dedis.ch/kyber/v3/pairing"
 
-	"go.dedis.ch/protobuf"
 	"github.com/dedis/student_19_nylechain/gentree"
 	"github.com/dedis/student_19_nylechain/service"
-	"github.com/dedis/student_19_nylechain/transaction"
 	"go.dedis.ch/kyber/v3/sign/bls"
 	"go.dedis.ch/kyber/v3/util/random"
 	"go.dedis.ch/onet/v3"
@@ -57,24 +54,28 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 	// Genesis of 2 different coins
 
 	PvK0, PbK0 := bls.NewKeyPair(testSuite, random.New())
-	PvK1, PbK1 := bls.NewKeyPair(testSuite, random.New())
+	/*PvK1, PbK1 := bls.NewKeyPair(testSuite, random.New())
 	_, PbK2 := bls.NewKeyPair(testSuite, random.New())
 	PubK0, _ := PbK0.MarshalBinary()
 	PubK1, _ := PbK1.MarshalBinary()
-	PubK2, _ := PbK2.MarshalBinary()
+	PubK2, _ := PbK2.MarshalBinary()*/
 	//_, PubK2 := bls.NewKeyPair(testSuite, random.New())
 	iD0 := []byte("Genesis0")
-	iD1 := []byte("Genesis1")
+	//iD1 := []byte("Genesis1")
 	coinID := []byte("0")
-	coinID1 := []byte("1")
+	//coinID1 := []byte("1")
 
 	err = c.GenesisTx(serverIDS, iD0, coinID, PbK0)
 	log.ErrFatal(err)
-	err = c.GenesisTx(serverIDS, iD1, coinID1, PbK0)
+
+	encodedTXs, err := service.TxChain(20, PbK0, PvK0, iD0, coinID)
 	log.ErrFatal(err)
 
+	//err = c.GenesisTx(serverIDS, iD1, coinID1, PbK0)
+	//log.ErrFatal(err)
+
 	// First transaction
-	inner := transaction.InnerTx{
+	/*inner := transaction.InnerTx{
 		CoinID:     coinID,
 		PreviousTx: iD0,
 		SenderPK:   PubK0,
@@ -109,7 +110,7 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 
 	// First transaction of the second coin
 
-	/*inner1 := transaction.InnerTx{
+	inner1 := transaction.InnerTx{
 		CoinID:     coinID1,
 		PreviousTx: iD1,
 		SenderPK:   PubK0,
@@ -144,44 +145,50 @@ func TestClientTreesBLSCoSi(t *testing.T) {
 	wg.Add(n)*/
 	for _, server := range servers[44:] {
 		//go func(server *onet.Server) {
-			// I exclude the first tree of every slice since it only contains one node
-			trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)][1:]
-			/*for _, tree := range trees {
-				for _, id := range tree.Roster.List {
-					log.LLvl1(id.String()[len(id.String())-2:])
-				}
-				log.LLvl1("---")
-			}*/
-			if len(trees) > 0 {
-				// First valid Tx
-				/*var w sync.WaitGroup
-				w.Add(1)
-				 var err0 error
-				go func() {*/
-					_, err := c.TreesBLSCoSi(server.ServerIdentity, txEncoded)
-					log.LLvl1(err)
-					/*w.Done()
-				}()
-				// Double spending attempt
-				_, err := c.TreesBLSCoSi(server.ServerIdentity, txEncodedAlt)
-				w.Wait()
-				log.LLvl1(err0)
-				log.LLvl1(err)
-				if err0 == nil && err == nil {
-					log.Fatal("Double spending accepted")
-				}*/
-
-				// Second valid Tx
-				_, err = c.TreesBLSCoSi(server.ServerIdentity, txEncoded02)
-				log.LLvl1(err)
+		// I exclude the first tree of every slice since it only contains one node
+		trees := lc.LocalityTrees[lc.Nodes.GetServerIdentityToName(server.ServerIdentity)][1:]
+		/*for _, tree := range trees {
+			for _, id := range tree.Roster.List {
+				log.LLvl1(id.String()[len(id.String())-2:])
 			}
-			//wg.Done()
+			log.LLvl1("---")
+		}*/
+		if len(trees) > 0 {
+			for _, encodedTX := range encodedTXs {
+				_, err = c.TreesBLSCoSi(server.ServerIdentity, encodedTX)
+				log.ErrFatal(err)
+			}
+		}
+
+		// First valid Tx
+		/*var w sync.WaitGroup
+			w.Add(1)
+			 var err0 error
+			go func() {
+			_, err := c.TreesBLSCoSi(server.ServerIdentity, txEncoded)
+			log.LLvl1(err)
+			w.Done()
+			}()
+			// Double spending attempt
+			_, err := c.TreesBLSCoSi(server.ServerIdentity, txEncodedAlt)
+			w.Wait()
+			log.LLvl1(err0)
+			log.LLvl1(err)
+			if err0 == nil && err == nil {
+				log.Fatal("Double spending accepted")
+			}
+
+			// Second valid Tx
+			_, err = c.TreesBLSCoSi(server.ServerIdentity, txEncoded02)
+			log.LLvl1(err)
+		}*/
+		//wg.Done()
 		//}(server)
 	}
 
 	//wg.Wait()
 
-	reply ,_ := c.RequestMemoryAllocated(serverIDS)
+	reply, _ := c.RequestMemoryAllocated(serverIDS)
 	log.LLvl1(reply)
 
 }

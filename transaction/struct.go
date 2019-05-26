@@ -20,4 +20,5 @@ type InnerTx struct {
 type Tx struct {
 	Inner     InnerTx
 	Signature []byte
+	Payload   []byte
 }

@@ -14,6 +14,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.dedis.ch/kyber/v3"
+	"go.dedis.ch/kyber/v3/util/random"
+
 	"github.com/dedis/student_19_nylechain/gentree"
 
 	"go.dedis.ch/cothority/v3"
@@ -99,10 +102,13 @@ func (s *Service) vf(msg []byte, id onet.TreeID) error {
 
 	suite := pairing.NewSuiteBn256()
 	senderPK := suite.G2().Point()
-	senderPK.UnmarshalBinary(tx.Inner.SenderPK)
-	err = bls.Verify(suite, senderPK, inner, tx.Signature)
+	err = senderPK.UnmarshalBinary(tx.Inner.SenderPK)
 	if err != nil {
 		return err
+	}
+	err = bls.Verify(suite, senderPK, inner, tx.Signature)
+	if err != nil {
+		return errors.New("This signature wasn't produced by the sender")
 	}
 
 	// Verify that the previous transaction is the last one of the chain
@@ -346,7 +352,6 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 					Tx:        tx,
 					Signature: sign,
 					TreeID:    tree.ID,
-					
 				}
 
 				// check final signature
@@ -657,4 +662,49 @@ func GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
 		Roster: args.Roster,
 	}
 	return reply, nil
+}
+
+// TxChain creates a sequence of encoded transactions of length n, where the public and private keys of the first sender,
+// the address of the genesis coin and the CoinID are given.
+func TxChain(n int, pubK0 kyber.Point, privK0 kyber.Scalar, genesisID []byte, coinID []byte) ([][]byte, error) {
+	payload := make([]byte, 500)
+	for i := 0; i < 500; i++ {
+		payload[i] = byte(i)
+	}
+	var txs [][]byte
+	pubK, err := pubK0.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	privK := privK0
+	var nextPubK []byte
+	var nextPrivK kyber.Scalar
+	prevTxHashed := genesisID
+	suite := pairing.NewSuiteBn256()
+	for i := 0; i < n; i++ {
+		var npk kyber.Point
+		nextPrivK, npk = bls.NewKeyPair(suite, random.New())
+		nextPubK, _ = npk.MarshalBinary()
+		inner := transaction.InnerTx{
+			CoinID:     coinID,
+			PreviousTx: prevTxHashed,
+			SenderPK:   pubK,
+			ReceiverPK: nextPubK,
+		}
+		pubK = nextPubK
+		innerEncoded, _ := protobuf.Encode(&inner)
+		signature, _ := bls.Sign(suite, privK, innerEncoded)
+		privK = nextPrivK
+		tx := transaction.Tx{
+			Inner:     inner,
+			Signature: signature,
+			Payload:   payload,
+		}
+		txEncoded, _ := protobuf.Encode(&tx)
+		txs = append(txs, txEncoded)
+		sha := sha256.New()
+		sha.Write(txEncoded)
+		prevTxHashed = sha.Sum(nil)
+	}
+	return txs, nil
 }
