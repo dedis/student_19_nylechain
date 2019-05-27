@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "os"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	nylechain "github.com/dedis/student_19_nylechain"
@@ -133,17 +134,20 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 		Signature: signature,
 	}
 	txEncoded, _ := protobuf.Encode(&tx)*/
-	txs, err := service.TxChain(1, PbK0, PvK0, iD0, coinID)
+	txs, err := service.TxChain(10, PbK0, PvK0, iD0, coinID)
 	log.ErrFatal(err)
-
+	start := time.Now()
 	for _, tx := range txs {
 		c.TreesBLSCoSi(serverIDS[44], tx)
 	}
+	t := time.Now()
+	elapsed := t.Sub(start)
 	averageMemories, err := c.RequestMemoryAllocated(serverIDS)
 	log.ErrFatal(err)
+	log.LLvl1("Time to execute ", len(txs), " txs :", elapsed)
 	for i := 1; i < 30; i++ {
 		if averageMemories[i] > 0 {
-			log.LLvl1(i, "trees : ", averageMemories[i])
+			log.LLvl1(i, "trees : ", averageMemories[i], " bytes")
 		}
 	}
 	return nil
