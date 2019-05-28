@@ -139,10 +139,10 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	start := time.Now()
 	sid := serverIDS[44]
 	rootName := lc.Nodes.GetServerIdentityToName(sid)
-	/*for _, tx := range txs {
+	for _, tx := range txs {
 		_, err = c.TreesBLSCoSi(sid, tx)
 		log.ErrFatal(err)
-	}*/
+	}
 	t := time.Now()
 	elapsed := t.Sub(start)
 	averageMemories, err := c.RequestMemoryAllocated(serverIDS)

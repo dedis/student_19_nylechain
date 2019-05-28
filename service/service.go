@@ -535,6 +535,7 @@ func (s *Service) startPropagation(propagate propagate.PropagationFunc, tree *on
 
 // MemoryAllocated sends the memory allocated and the number of trees the node is a part of to the client.
 func (s *Service) MemoryAllocated(req *MemoryRequest) (*MemoryReply, error) {
+	
 	return &MemoryReply{
 		BytesAllocated: s.db.Stats().TxStats.PageAlloc,
 		NbrTrees:       len(s.trees),
