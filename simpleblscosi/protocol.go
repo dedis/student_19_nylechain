@@ -1,9 +1,10 @@
 package simpleblscosi
 
 import (
-	"time"
 	"errors"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dedis/student_19_nylechain/transaction"
 	"go.dedis.ch/protobuf"
@@ -166,13 +167,19 @@ func (c *SimpleBLSCoSi) handlePrepare(in *SimplePrepare) error {
 	}
 
 	// send to children
+	var wg sync.WaitGroup
+	wg.Add(len(c.Children()))
 	for _, child := range c.Children() {
-		dist := c.distances[c.ServerIdentity().String()][child.ServerIdentity.String()]
-		time.Sleep(time.Duration(dist)/10 * time.Millisecond)
-		err0 := c.SendTo(child, in)
-		if err != nil {
-			err = err0
-		}
+		go func(child *onet.TreeNode) {
+			defer wg.Done()
+			dist := c.distances[c.ServerIdentity().String()][child.ServerIdentity.String()]
+			time.Sleep(time.Duration(dist) / 10 * time.Millisecond)
+			err0 := c.SendTo(child, in)
+			if err != nil {
+				err = err0
+			}
+		}(child)
+
 	}
 	return err
 }
@@ -265,7 +272,7 @@ func (c *SimpleBLSCoSi) handlePrepareReplies(replies []*SimplePrepareReply) erro
 	}
 
 	dist := c.distances[c.ServerIdentity().String()][c.Parent().ServerIdentity.String()]
-	time.Sleep(time.Duration(dist)/10 * time.Millisecond)
+	time.Sleep(time.Duration(dist) / 10 * time.Millisecond)
 	log.Lvlf3("%s sending to parent", c.ServerIdentity())
 	return c.SendTo(c.Parent(), outMsg)
 }
@@ -285,13 +292,19 @@ func (c *SimpleBLSCoSi) handleCommit(in *SimpleCommit) error {
 	}
 
 	// otherwise send it to children
+	var wg sync.WaitGroup
+	wg.Add(len(c.Children()))
 	for _, child := range c.Children() {
-		dist := c.distances[c.ServerIdentity().String()][child.ServerIdentity.String()]
-		time.Sleep(time.Duration(dist)/10 * time.Millisecond)
-		err0 := c.SendTo(child, in)
-		if err != nil {
-			err = err0
-		}
+		go func(child *onet.TreeNode) {
+			defer wg.Done()
+			dist := c.distances[c.ServerIdentity().String()][child.ServerIdentity.String()]
+			time.Sleep(time.Duration(dist) / 10 * time.Millisecond)
+			err0 := c.SendTo(child, in)
+			if err != nil {
+				err = err0
+			}
+		}(child)
+
 	}
 	return err
 }
@@ -384,7 +397,7 @@ func (c *SimpleBLSCoSi) handleCommitReplies(replies []*SimpleCommitReply) error 
 	// send it back to parent
 	if !c.IsRoot() {
 		dist := c.distances[c.ServerIdentity().String()][c.Parent().ServerIdentity.String()]
-		time.Sleep(time.Duration(dist)/10 * time.Millisecond)
+		time.Sleep(time.Duration(dist) / 10 * time.Millisecond)
 		return c.SendTo(c.Parent(), out)
 	}
 
@@ -400,7 +413,7 @@ func (c *SimpleBLSCoSi) handleError(tErr *TransmitError) error {
 		return c.handleShutdown(&Shutdown{Error: tErr.Error})
 	}
 	dist := c.distances[c.ServerIdentity().String()][c.Parent().ServerIdentity.String()]
-	time.Sleep(time.Duration(dist)/10 * time.Millisecond)
+	time.Sleep(time.Duration(dist) / 10 * time.Millisecond)
 	return c.SendTo(c.Parent(), &TransmitError{Error: tErr.Error})
 }
 
@@ -428,14 +441,20 @@ func (c *SimpleBLSCoSi) handleShutdown(shutdown *Shutdown) error {
 	atomic.CompareAndSwapInt32(&(c.atomicCoinReserved[resourceIdx]), 1, 0)
 
 	if !c.IsLeaf() {
+		var wg sync.WaitGroup
+		wg.Add(len(c.Children()))
 		for _, child := range c.Children() {
-			dist := c.distances[c.ServerIdentity().String()][child.ServerIdentity.String()]
-			time.Sleep(time.Duration(dist)/10 * time.Millisecond)
-			err0 := c.SendTo(child, shutdown)
-			if err != nil {
-				err = err0
-			}
+			go func(child *onet.TreeNode) {
+				defer wg.Done()
+				dist := c.distances[c.ServerIdentity().String()][child.ServerIdentity.String()]
+				time.Sleep(time.Duration(dist) / 10 * time.Millisecond)
+				err0 := c.SendTo(child, shutdown)
+				if err != nil {
+					err = err0
+				}
+			}(child)
 		}
+		wg.Wait()
 		return err
 	}
 	if c.IsRoot() {

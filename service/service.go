@@ -419,7 +419,7 @@ func (s *Service) checkBeforePropagation(data *PropagateData) error {
 func (s *Service) propagateHandler(msg network.Message) error {
 	data := msg.(*PropagateData)
 	dist := s.distances[s.ServerIdentity().String()][data.ServerID]
-	time.Sleep(time.Duration(dist)/10 * time.Millisecond)
+	time.Sleep(time.Duration(dist) / 10 * time.Millisecond)
 	txEncoded, err := protobuf.Encode(&data.Tx)
 	if err != nil {
 		return err
@@ -533,9 +533,8 @@ func (s *Service) startPropagation(propagate propagate.PropagationFunc, tree *on
 	return nil
 }
 
-// MemoryAllocated sends the memory allocated and the number of trees the node is a part of to the client.
+// MemoryAllocated sends the bbolt memory allocated and the number of trees the node is a part of to the client.
 func (s *Service) MemoryAllocated(req *MemoryRequest) (*MemoryReply, error) {
-	
 	return &MemoryReply{
 		BytesAllocated: s.db.Stats().TxStats.PageAlloc,
 		NbrTrees:       len(s.trees),

@@ -88,8 +88,6 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	// TODO path to use when running api test
 	// lc.Setup(config.Roster, "nodeGen/nodes.txt")
 
-	log.LLvl1("after")
-
 	for _, trees := range lc.LocalityTrees {
 		for _, tree := range trees[1:] {
 			fullTreeSlice = append(fullTreeSlice, tree)
