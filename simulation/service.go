@@ -134,17 +134,28 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 		Signature: signature,
 	}
 	txEncoded, _ := protobuf.Encode(&tx)*/
-	txs, err := service.TxChain(10, PbK0, PvK0, iD0, coinID)
+	txs, err := service.TxChain(2, PbK0, PvK0, iD0, coinID)
 	log.ErrFatal(err)
 	start := time.Now()
-	for _, tx := range txs {
-		c.TreesBLSCoSi(serverIDS[44], tx)
-	}
+	sid := serverIDS[44]
+	rootName := lc.Nodes.GetServerIdentityToName(sid)
+	/*for _, tx := range txs {
+		_, err = c.TreesBLSCoSi(sid, tx)
+		log.ErrFatal(err)
+	}*/
 	t := time.Now()
 	elapsed := t.Sub(start)
 	averageMemories, err := c.RequestMemoryAllocated(serverIDS)
 	log.ErrFatal(err)
-	log.LLvl1("Time to execute ", len(txs), " txs :", elapsed)
+
+	log.LLvl1("-----------------")
+	for _, n := range lc.LocalityTrees[rootName][1:] {
+		log.LLvl1(rootName, "is the root of a tree with ", len(n.Roster.List), "nodes.")
+	}
+	log.LLvl1("-----------------")
+
+	log.LLvl1("Time to execute ", len(txs), " Tx(s) :", elapsed)
+	log.LLvl1("-----------------")
 	for i := 1; i < 30; i++ {
 		if averageMemories[i] > 0 {
 			log.LLvl1(i, "trees : ", averageMemories[i], " bytes")

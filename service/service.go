@@ -361,10 +361,6 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 					return
 				}
 
-				// TODO: We either change the propagation handler to return an error, or we pass the variable “problem”
-				//  to the handler and store errors there, and check that there are no errors when the handler returns,
-				//  so we don’t continue with the storage in case there’s a problem.
-
 				// Only propagate to that specific tree
 				err = s.startPropagation(s.propagateF, tree, data)
 				if err != nil {
@@ -372,7 +368,6 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 					return
 				}
 
-				// TODO: Check that the handler didn't encounter any errors beofre storing
 				treeIDS[i] = tree.ID
 				signatures[i] = data.Signature
 			}
@@ -380,8 +375,6 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	}
 	wg.Wait()
 
-	// TODO: make sure the errors from the propagation handler are stored in problem, so that they're visible
-	//  outside this "TreesBLSCosi" function, which means the txn did not successfully complete
 	if problem != nil {
 		return &CoSiReplyTrees{
 			TreeIDS:    treeIDS,
