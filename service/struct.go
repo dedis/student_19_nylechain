@@ -44,6 +44,10 @@ type PropagateData struct {
 	TreeID    onet.TreeID
 }
 
+type CoSiSendRaw struct {
+	CoSiTrees
+}
+
 // CoSiTrees contains the encoded Tx.
 type CoSiTrees struct {
 	Message  []byte
@@ -82,6 +86,7 @@ type GenesisArgs struct {
 type TxStorage struct {
 	Tx         transaction.Tx
 	Signatures [][]byte
+	Payload [][]byte
 }
 
 // MemoryRequest is handled by service function MemoryAllocated

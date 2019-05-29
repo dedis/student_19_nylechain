@@ -44,7 +44,10 @@ const protoName = "simpleBLSCoSi"
 // ServiceName is also used in api.go for example
 const ServiceName = "SimpleBLSCoSi"
 
+var cosiSendRawID network.MessageTypeID
+
 func init() {
+	cosiSendRawID = network.RegisterMessage(&CoSiSendRaw{})
 	var err error
 	SimpleBLSCoSiID, err = onet.RegisterNewService(ServiceName, newService)
 	log.ErrFatal(err)
@@ -287,6 +290,16 @@ func (s *Service) GenesisTx(args *GenesisArgs) (*VoidReply, error) {
 	return &VoidReply{}, err
 }
 
+func (s *Service) HandleRaw(env *network.Envelope) error {
+	req, ok := env.Msg.(*CoSiSendRaw)
+	if !ok {
+		return errors.New("")
+	}
+	s.TreesBLSCoSi(&req.CoSiTrees)
+	log.LLvl1("Anything")
+	return nil
+}
+
 // TreesBLSCoSi finds the trees rooted at this node and runs the protocol on them concurrently.
 // The "Message" argument is always an encoded transaction.
 // It propagates the transaction and the aggregate signatures so that they're stored.
@@ -303,7 +316,8 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 		}
 		// TODO: SendRaw does not work yet
 		for _, ID := range s.rootsIDs {
-			s.SendRaw(ID, coSiTree)
+			err := s.SendRaw(ID, &CoSiSendRaw{*coSiTree})
+			log.ErrFatal(err)
 		}
 	}
 	tx := transaction.Tx{}
@@ -479,6 +493,7 @@ func (s *Service) propagateHandler(msg network.Message) error {
 			return err
 		}
 		storage.Signatures = append(storage.Signatures, data.Signature)
+		storage.Payload = append(storage.Payload, make([]byte, 500))
 		storageEncoded, err := protobuf.Encode(storage)
 		if err != nil {
 			return err
@@ -535,9 +550,17 @@ func (s *Service) startPropagation(propagate propagate.PropagationFunc, tree *on
 
 // MemoryAllocated sends the bbolt memory allocated and the number of trees the node is a part of to the client.
 func (s *Service) MemoryAllocated(req *MemoryRequest) (*MemoryReply, error) {
+	var b int
+	s.db.View(func(tx *bbolt.Tx) error {
+		stats := tx.Bucket(s.bucketNameTx).Stats()
+		b = stats.LeafInuse
+		return nil
+	})
+
 	return &MemoryReply{
-		BytesAllocated: s.db.Stats().TxStats.PageAlloc,
-		NbrTrees:       len(s.trees),
+		BytesAllocated: b,
+		//BytesAllocated: s.db.Stats().TxStats.PageAlloc,
+		NbrTrees: len(s.trees),
 	}, nil
 }
 
@@ -548,6 +571,7 @@ func newService(c *onet.Context) (onet.Service, error) {
 	s := &Service{
 		ServiceProcessor: onet.NewServiceProcessor(c),
 	}
+	s.RegisterProcessorFunc(cosiSendRawID, s.HandleRaw)
 	_, err := c.ProtocolRegister(protoName, s.NewDefaultProtocol)
 	if err != nil {
 		return nil, err
