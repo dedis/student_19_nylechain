@@ -44,6 +44,7 @@ type PropagateData struct {
 	TreeID    onet.TreeID
 }
 
+// CoSiSendRaw is handled by HandleRaw
 type CoSiSendRaw struct {
 	CoSiTrees
 }

@@ -27,7 +27,7 @@ type SimpleBLSCoSi struct {
 	commitMsg SimpleCommit
 
 	// Inherited from the service
-	set []byte
+	treeID onet.TreeID
 
 	// Keys are concatenations of TreeID + CoinID
 	coinToAtomic       map[string]int
@@ -55,13 +55,13 @@ type SimpleBLSCoSi struct {
 type VerificationFn func(msg []byte, id onet.TreeID) error
 
 // NewProtocol is a callback that is executed when starting the protocol.
-func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, set []byte, atomicCoinReserved []int32,
+func NewProtocol(node *onet.TreeNodeInstance, vf VerificationFn, treeID onet.TreeID, atomicCoinReserved []int32,
 	coinToAtomic map[string]int, distances map[string]map[string]float64, suite *pairing.SuiteBn256) (onet.ProtocolInstance, error) {
 	c := &SimpleBLSCoSi{
 		TreeNodeInstance:   node,
 		suite:              suite,
 		vf:                 vf,
-		set:                set,
+		treeID:             treeID,
 		coinToAtomic:       coinToAtomic,
 		atomicCoinReserved: atomicCoinReserved,
 		distances:          distances,
@@ -209,7 +209,7 @@ func (c *SimpleBLSCoSi) handlePrepareReplies(replies []*SimplePrepareReply) erro
 	if err != nil {
 		return err
 	}
-	key := string(c.set) + string(tx.Inner.CoinID)
+	key := c.treeID.String() + string(tx.Inner.CoinID)
 	resourceIdx := c.coinToAtomic[key]
 	succeeded := atomic.CompareAndSwapInt32(&(c.atomicCoinReserved[resourceIdx]), 0, 1)
 
@@ -436,7 +436,7 @@ func (c *SimpleBLSCoSi) handleShutdown(shutdown *Shutdown) error {
 		c.atomicCoinReserved[key].Unlock()
 	*/
 
-	key := string(c.set) + string(tx.Inner.CoinID)
+	key := c.treeID.String() + string(tx.Inner.CoinID)
 	resourceIdx := c.coinToAtomic[key]
 	atomic.CompareAndSwapInt32(&(c.atomicCoinReserved[resourceIdx]), 1, 0)
 

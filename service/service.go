@@ -75,7 +75,7 @@ type Service struct {
 	// Complete list of translation from a Tree to its ordered set
 	treeIDSToSets map[onet.TreeID][]byte
 
-	// Keys are concatenations of SetOfNodes + CoinID
+	// Keys are concatenations of TreeID + CoinID
 	coinToAtomic       map[string]int
 	atomicCoinReserved []int32
 
@@ -84,8 +84,8 @@ type Service struct {
 	// Stores each transaction and its aggregate signatures (struct TxStorage), keyed to a hash of the encoded Tx.
 	bucketNameTx []byte
 
-	// Stores the last Tx, hashed (its key in the first bucket) for each node set and CoinID,
-	// keyed to a concatenation of hash(SetOfNodes) + CoinID
+	// Stores the last Tx, hashed (its key in the first bucket) for each Tree and CoinID,
+	// keyed to a concatenation of TreeID + CoinID
 	bucketNameLastTx []byte
 
 	propagateF propagate.PropagationFunc
@@ -117,11 +117,7 @@ func (s *Service) vf(msg []byte, id onet.TreeID) error {
 	// Verify that the previous transaction is the last one of the chain
 	err = s.db.View(func(bboltTx *bbolt.Tx) error {
 		b := bboltTx.Bucket(s.bucketNameLastTx)
-		// Get the set of that TreeID's Tree
-		set := s.treeIDSToSets[id]
-		sha := sha256.New()
-		sha.Write(set)
-		v := b.Get(append(sha.Sum(nil), tx.Inner.CoinID...))
+		v := b.Get(append([]byte(id.String()), tx.Inner.CoinID...))
 		if bytes.Compare(v, tx.Inner.PreviousTx) != 0 {
 			return errors.New("The previous transaction is not the last of the chain")
 		}
@@ -191,8 +187,7 @@ func (s *Service) IsSubSetOfNodes(fullID onet.TreeID, subID onet.TreeID) (bool, 
 // NewDefaultProtocol is the default protocol function, with a verification function that checks transactions.
 func (s *Service) NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error) {
 	suite := pairing.NewSuiteBn256()
-	set := s.treeIDSToSets[n.Tree().ID]
-	return simpleblscosi.NewProtocol(n, s.vf, set, s.atomicCoinReserved, s.coinToAtomic, s.distances, suite)
+	return simpleblscosi.NewProtocol(n, s.vf, n.Tree().ID, s.atomicCoinReserved, s.coinToAtomic, s.distances, suite)
 }
 
 // NewProtocol is an override. It's called on children automatically
@@ -200,8 +195,7 @@ func (s *Service) NewProtocol(n *onet.TreeNodeInstance, conf *onet.GenericConfig
 	switch n.ProtocolName() {
 	case protoName:
 		suite := pairing.NewSuiteBn256()
-		set := s.treeIDSToSets[n.Tree().ID]
-		return simpleblscosi.NewProtocol(n, s.vf, set, s.atomicCoinReserved, s.coinToAtomic, s.distances, suite)
+		return simpleblscosi.NewProtocol(n, s.vf, n.Tree().ID, s.atomicCoinReserved, s.coinToAtomic, s.distances, suite)
 	case "Propagate":
 		return s.mypi(n)
 	default:
@@ -273,14 +267,11 @@ func (s *Service) GenesisTx(args *GenesisArgs) (*VoidReply, error) {
 		b = bboltTx.Bucket(s.bucketNameLastTx)
 		for id := range s.trees {
 			// Initialize the index of the atomic int, and the atomic int itself
-			set := s.treeIDSToSets[id]
-			sha := sha256.New()
-			sha.Write(set)
-			s.coinToAtomic[string(set)+string(args.CoinID)] = len(s.atomicCoinReserved)
+			s.coinToAtomic[id.String()+string(args.CoinID)] = len(s.atomicCoinReserved)
 			s.atomicCoinReserved = append(s.atomicCoinReserved, 0)
 
 			// Store as last Tx
-			err = b.Put(append(sha.Sum(nil), args.CoinID...), args.ID)
+			err = b.Put(append([]byte(id.String()), args.CoinID...), args.ID)
 			if err != nil {
 				return err
 			}
@@ -290,13 +281,13 @@ func (s *Service) GenesisTx(args *GenesisArgs) (*VoidReply, error) {
 	return &VoidReply{}, err
 }
 
+// HandleRaw handles SendRaw, launches TreesBLSCoSi
 func (s *Service) HandleRaw(env *network.Envelope) error {
 	req, ok := env.Msg.(*CoSiSendRaw)
 	if !ok {
-		return errors.New("")
+		return errors.New("Error in HandleRaw")
 	}
 	s.TreesBLSCoSi(&req.CoSiTrees)
-	log.LLvl1("Anything")
 	return nil
 }
 
@@ -429,7 +420,7 @@ func (s *Service) checkBeforePropagation(data *PropagateData) error {
 }
 
 // propagateHandler receives a *PropagateData. It stores the transaction and its aggregate signatures in the "Tx"
-// bucket, and tracks the last transaction for each coin and set in the "LastTx" bucket.
+// bucket, and tracks the last transaction for each coin and tree in the "LastTx" bucket.
 func (s *Service) propagateHandler(msg network.Message) error {
 	data := msg.(*PropagateData)
 	dist := s.distances[s.ServerIdentity().String()][data.ServerID]
@@ -463,11 +454,8 @@ func (s *Service) propagateHandler(msg network.Message) error {
 		}
 
 		// Non-initialization : we received a new aggregate structure that we need to store.
-		set := s.treeIDSToSets[data.TreeID]
-		sha := sha256.New()
-		sha.Write(set)
 		//defer s.atomicCoinReserved[string(set)+string(data.Tx.Inner.CoinID)].Unlock()
-		key := string(set) + string(data.Tx.Inner.CoinID)
+		key := data.TreeID.String() + string(data.Tx.Inner.CoinID)
 		resourceIdx := s.coinToAtomic[key]
 		defer atomic.CompareAndSwapInt32(&(s.atomicCoinReserved[resourceIdx]), 1, 0)
 
@@ -505,14 +493,14 @@ func (s *Service) propagateHandler(msg network.Message) error {
 		// Update LastTx bucket too
 		b = bboltTx.Bucket(s.bucketNameLastTx)
 
-		// Register as LastTx for this tree's set
-		err = b.Put(append(sha.Sum(nil), data.Tx.Inner.CoinID...), h)
+		// Register as LastTx for this tree
+		err = b.Put(append([]byte(data.TreeID.String()), data.Tx.Inner.CoinID...), h)
 		if err != nil {
 			return err
 		}
 
 		// Register as LastTx for every subset of this tree's set
-		for id := range s.trees {
+		/*for id := range s.trees {
 			isSubset, err := s.IsSubSetOfNodes(data.TreeID, id)
 			if err != nil {
 				return err
@@ -525,7 +513,7 @@ func (s *Service) propagateHandler(msg network.Message) error {
 					return err
 				}
 			}
-		}
+		}*/
 		return nil
 	})
 
