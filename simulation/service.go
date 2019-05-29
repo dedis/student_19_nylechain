@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "os"
+	"sync"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -73,8 +74,11 @@ func (s *SimulationService) Node(config *onet.SimulationConfig) error {
 func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	size := config.Tree.Size()
 	log.Lvl2("Size is:", size, "rounds:", s.Rounds)
-
-	c := nylechain.NewClient()
+	numberTXs := 30
+	var clients []*nylechain.Client
+	for i := 0; i < numberTXs; i++ {
+		clients = append(clients, nylechain.NewClient())
+	}
 
 	var fullTreeSlice []*onet.Tree
 	serverIDS := config.Roster.List
@@ -98,7 +102,7 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	distances := service.CreateMatrixOfDistances(serverIDS, lc.Nodes)
 
 	translations := service.TreesToSetsOfNodes(fullTreeSlice, config.Roster.List)
-	err := c.Setup(config.Roster, translations, distances)
+	err := clients[0].Setup(config.Roster, translations, distances)
 	log.ErrFatal(err)
 
 	// Genesis of 2 different coins
@@ -112,7 +116,7 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	//iD1 := []byte("Genesis1")
 	//coinID := []byte("0")
 	//coinID1 := []byte("1")
-	
+
 	/*err = c.GenesisTx(serverIDS, iD1, coinID1, PbK0)
 	log.ErrFatal(err)
 
@@ -134,21 +138,32 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	//txs, err := service.TxChain(2, PbK0, PvK0, ids[0], ids[0])
 	//log.ErrFatal(err)
 
-	ids, txs := service.TxUnrelated(1, PbK0, PvK0)
-	for _, id := range ids {
-		err = c.GenesisTx(serverIDS, id, id, PbK0)
-		log.ErrFatal(err)
+	ids, txs := service.TxUnrelated(numberTXs, PbK0, PvK0)
+	var wg sync.WaitGroup
+	wg.Add(numberTXs)
+	for i, id := range ids {
+		go func(i int, id []byte) {
+			err = clients[i].GenesisTx(serverIDS, id, id, PbK0)
+			log.ErrFatal(err)
+			wg.Done()
+		}(i, id)
 	}
+	wg.Wait()
+	wg.Add(numberTXs)
 	start := time.Now()
 	for i, tx := range txs {
-		j := i % len(serverIDS)
-		_, err = c.TreesBLSCoSi(serverIDS[j], tx)
-		log.ErrFatal(err)
-		log.LLvl1(i)
+		go func(i int, tx []byte) {
+			j := i % len(serverIDS)
+			_, err = clients[i].TreesBLSCoSi(serverIDS[j], tx)
+			log.ErrFatal(err)
+			log.LLvl1(i)
+			wg.Done()
+		}(i, tx)
 	}
+	wg.Wait()
 	t := time.Now()
 	elapsed := t.Sub(start)
-	averageMemories, err := c.RequestMemoryAllocated(serverIDS)
+	averageMemories, err := clients[0].RequestMemoryAllocated(serverIDS)
 	log.ErrFatal(err)
 
 	log.LLvl1("-----------------")
@@ -162,10 +177,10 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	}
 	log.LLvl1("-----------------")
 	return nil
-	
+
 	//err = c.GenesisTx(serverIDS, ids[0], ids[0], PbK0)
 	//log.ErrFatal(err)
-	
+
 	/*start := time.Now()
 	sid := serverIDS[44]
 	rootName := lc.Nodes.GetServerIdentityToName(sid)
