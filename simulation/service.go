@@ -74,7 +74,7 @@ func (s *SimulationService) Node(config *onet.SimulationConfig) error {
 func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	size := config.Tree.Size()
 	log.Lvl2("Size is:", size, "rounds:", s.Rounds)
-	numberTXs := 30
+	numberTXs := 1
 	var clients []*nylechain.Client
 	for i := 0; i < numberTXs; i++ {
 		clients = append(clients, nylechain.NewClient())
@@ -104,7 +104,6 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	translations := service.TreesToSetsOfNodes(fullTreeSlice, config.Roster.List)
 	err := clients[0].Setup(config.Roster, translations, distances)
 	log.ErrFatal(err)
-
 	// Genesis of 2 different coins
 	suite := pairing.NewSuiteBn256()
 	PvK0, PbK0 := bls.NewKeyPair(suite, random.New())

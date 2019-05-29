@@ -298,18 +298,22 @@ func (s *Service) HandleRaw(env *network.Envelope) error {
 // this function themselves for the same Tx.
 // The signatures returned are ordered like the corresponding trees.
 func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
-	// log.LLvl1(s.ServerIdentity())
 	if args.Transmit {
 		coSiTree := &CoSiTrees{
 			Message: args.Message,
 			// We don't want infinite loops
 			Transmit: false,
 		}
-		// TODO: SendRaw does not work yet
-		for _, ID := range s.rootsIDs {
-			err := s.SendRaw(ID, &CoSiSendRaw{*coSiTree})
-			log.ErrFatal(err)
+		var wg sync.WaitGroup
+		wg.Add(len(s.rootsIDs))
+		for _, id := range s.rootsIDs {
+			go func(id *network.ServerIdentity) {
+				err := s.SendRaw(id, &CoSiSendRaw{*coSiTree})
+				log.ErrFatal(err)
+				wg.Done()
+			}(id)
 		}
+		wg.Wait()
 	}
 	tx := transaction.Tx{}
 	err := protobuf.DecodeWithConstructors(args.Message, &tx, network.DefaultConstructors(cothority.Suite))
@@ -549,7 +553,6 @@ func (s *Service) MemoryAllocated(req *MemoryRequest) (*MemoryReply, error) {
 
 	return &MemoryReply{
 		BytesAllocated: b,
-		//BytesAllocated: s.db.Stats().TxStats.PageAlloc,
 		NbrTrees: len(s.trees),
 	}, nil
 }
@@ -674,8 +677,8 @@ func GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
 // TxChain creates a valid sequence of encoded transactions of length n, where the public and private keys of the first sender,
 // the address of the genesis coin and the CoinID are given.
 func TxChain(n int, pubK0 kyber.Point, privK0 kyber.Scalar, genesisID []byte, coinID []byte) ([][]byte, error) {
-	payload := make([]byte, 500)
-	for i := 0; i < 500; i++ {
+	payload := make([]byte, 650)
+	for i := 0; i < 650; i++ {
 		payload[i] = byte(i)
 	}
 	var txs [][]byte
@@ -721,8 +724,8 @@ func TxChain(n int, pubK0 kyber.Point, privK0 kyber.Scalar, genesisID []byte, co
 // many transactions on different coins. For more simplicity, the sender and receiver are always the same.
 // A payload is also included for those transactions.
 func TxUnrelated(n int, pubK kyber.Point, pvK kyber.Scalar) ([][]byte, [][]byte) {
-	payload := make([]byte, 500)
-	for i := 0; i < 500; i++ {
+	payload := make([]byte, 650)
+	for i := 0; i < 650; i++ {
 		payload[i] = byte(i)
 	}
 	suite := pairing.NewSuiteBn256()
