@@ -132,13 +132,14 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 		Signature: signature,
 	}
 	txEncoded, _ := protobuf.Encode(&tx)*/
-	txs, err := service.TxChain(2, PbK0, PvK0, iD0, coinID)
+	txs, err := service.TxChain(1, PbK0, PvK0, iD0, coinID)
 	log.ErrFatal(err)
 	start := time.Now()
 	sid := serverIDS[44]
 	rootName := lc.Nodes.GetServerIdentityToName(sid)
-	for _, tx := range txs {
+	for i, tx := range txs {
 		_, err = c.TreesBLSCoSi(sid, tx)
+		log.LLvl1(i)
 		log.ErrFatal(err)
 	}
 	t := time.Now()
@@ -159,5 +160,6 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 			log.LLvl1(i, "trees : ", averageMemories[i], " bytes")
 		}
 	}
+	log.LLvl1("-----------------")
 	return nil
 }
