@@ -320,6 +320,9 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 	// We send the initialization on the entire roster before sending signatures
 	trees := s.Lc.LocalityTrees[s.Lc.Nodes.GetServerIdentityToName(s.ServerIdentity())][1:]
 	n := len(trees)
+	if n == 0 {
+		return nil, nil
+	}
 	fullTree := trees[n-1]
 	data := PropagateData{Tx: tx, ServerID: s.ServerIdentity().String()}
 
@@ -423,8 +426,8 @@ func (s *Service) checkBeforePropagation(data *PropagateData) error {
 // bucket, and tracks the last transaction for each coin and tree in the "LastTx" bucket.
 func (s *Service) propagateHandler(msg network.Message) error {
 	data := msg.(*PropagateData)
-	dist := s.distances[s.ServerIdentity().String()][data.ServerID]
-	time.Sleep(time.Duration(dist) / 10 * time.Millisecond)
+	//dist := s.distances[s.ServerIdentity().String()][data.ServerID]
+	//time.Sleep(time.Duration(dist) / 10 * time.Millisecond)
 	txEncoded, err := protobuf.Encode(&data.Tx)
 	if err != nil {
 		return err
@@ -481,7 +484,6 @@ func (s *Service) propagateHandler(msg network.Message) error {
 			return err
 		}
 		storage.Signatures = append(storage.Signatures, data.Signature)
-		storage.Payload = append(storage.Payload, make([]byte, 500))
 		storageEncoded, err := protobuf.Encode(storage)
 		if err != nil {
 			return err
@@ -541,7 +543,7 @@ func (s *Service) MemoryAllocated(req *MemoryRequest) (*MemoryReply, error) {
 	var b int
 	s.db.View(func(tx *bbolt.Tx) error {
 		stats := tx.Bucket(s.bucketNameTx).Stats()
-		b = stats.LeafInuse
+		b = stats.LeafInuse + stats.BranchInuse
 		return nil
 	})
 
@@ -712,4 +714,40 @@ func TxChain(n int, pubK0 kyber.Point, privK0 kyber.Scalar, genesisID []byte, co
 		prevTxHashed = sha.Sum(nil)
 	}
 	return txs, nil
+}
+
+// TxUnrelated generates a variable number of IDs that can be used both as the main bucket keys for genesis coins as well as
+// for coinIDs, and also returns as many encoded transactions each corresponding to a coin. This can be used in testing to generate
+// many transactions on different coins. For more simplicity, the sender and receiver are always the same.
+// A payload is also included for those transactions.
+func TxUnrelated(n int, pubK kyber.Point, pvK kyber.Scalar) ([][]byte, [][]byte) {
+	payload := make([]byte, 500)
+	for i := 0; i < 500; i++ {
+		payload[i] = byte(i)
+	}
+	suite := pairing.NewSuiteBn256()
+	pbK, _ := pubK.MarshalBinary()
+	_, pubK1 := bls.NewKeyPair(suite, random.New())
+	pbK1, _ := pubK1.MarshalBinary()
+	var ids [][]byte
+	var txs [][]byte
+	for i := 0; i < n; i++ {
+		ids = append(ids, []byte(string(i)))
+		inner := transaction.InnerTx{
+			CoinID:     []byte(string(i)),
+			PreviousTx: []byte(string(i)),
+			SenderPK:   pbK,
+			ReceiverPK: pbK1,
+		}
+		innerEncoded, _ := protobuf.Encode(&inner)
+		signature, _ := bls.Sign(suite, pvK, innerEncoded)
+		tx := transaction.Tx{
+			Inner:     inner,
+			Signature: signature,
+			Payload:   payload,
+		}
+		txEncoded, _ := protobuf.Encode(&tx)
+		txs = append(txs, txEncoded)
+	}
+	return ids, txs
 }

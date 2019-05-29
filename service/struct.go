@@ -87,7 +87,6 @@ type GenesisArgs struct {
 type TxStorage struct {
 	Tx         transaction.Tx
 	Signatures [][]byte
-	Payload [][]byte
 }
 
 // MemoryRequest is handled by service function MemoryAllocated

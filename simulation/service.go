@@ -108,13 +108,11 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	//_, PubK2 := bls.NewKeyPair(testSuite, random.New())
 	PubK0, _ := PbK0.MarshalBinary()
 	PubK1, _ := PbK1.MarshalBinary()*/
-	iD0 := []byte("Genesis0")
+	//iD0 := []byte("Genesis0")
 	//iD1 := []byte("Genesis1")
-	coinID := []byte("0")
+	//coinID := []byte("0")
 	//coinID1 := []byte("1")
-
-	err = c.GenesisTx(serverIDS, iD0, coinID, PbK0)
-	log.ErrFatal(err)
+	
 	/*err = c.GenesisTx(serverIDS, iD1, coinID1, PbK0)
 	log.ErrFatal(err)
 
@@ -132,9 +130,43 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 		Signature: signature,
 	}
 	txEncoded, _ := protobuf.Encode(&tx)*/
-	txs, err := service.TxChain(10, PbK0, PvK0, iD0, coinID)
-	log.ErrFatal(err)
+
+	//txs, err := service.TxChain(2, PbK0, PvK0, ids[0], ids[0])
+	//log.ErrFatal(err)
+
+	ids, txs := service.TxUnrelated(1, PbK0, PvK0)
+	for _, id := range ids {
+		err = c.GenesisTx(serverIDS, id, id, PbK0)
+		log.ErrFatal(err)
+	}
 	start := time.Now()
+	for i, tx := range txs {
+		j := i % len(serverIDS)
+		_, err = c.TreesBLSCoSi(serverIDS[j], tx)
+		log.ErrFatal(err)
+		log.LLvl1(i)
+	}
+	t := time.Now()
+	elapsed := t.Sub(start)
+	averageMemories, err := c.RequestMemoryAllocated(serverIDS)
+	log.ErrFatal(err)
+
+	log.LLvl1("-----------------")
+
+	log.LLvl1("Time to execute ", len(txs), " Tx(s) :", elapsed)
+	log.LLvl1("-----------------")
+	for i := 1; i < 30; i++ {
+		if averageMemories[i] > 0 {
+			log.LLvl1(i, "trees : ", averageMemories[i], " bytes")
+		}
+	}
+	log.LLvl1("-----------------")
+	return nil
+	
+	//err = c.GenesisTx(serverIDS, ids[0], ids[0], PbK0)
+	//log.ErrFatal(err)
+	
+	/*start := time.Now()
 	sid := serverIDS[44]
 	rootName := lc.Nodes.GetServerIdentityToName(sid)
 	for i, tx := range txs {
@@ -161,5 +193,5 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 		}
 	}
 	log.LLvl1("-----------------")
-	return nil
+	return nil*/
 }
