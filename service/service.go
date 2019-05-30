@@ -318,6 +318,13 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 		}
 		wg.Wait()
 	}
+
+	trees := s.Lc.LocalityTrees[s.Lc.Nodes.GetServerIdentityToName(s.ServerIdentity())][1:]
+	n := len(trees)
+	if n == 0 {
+		return &CoSiReplyTrees{}, nil
+	}
+
 	tx := transaction.Tx{}
 	err := protobuf.DecodeWithConstructors(args.Message, &tx, network.DefaultConstructors(cothority.Suite))
 	if err != nil {
@@ -325,11 +332,6 @@ func (s *Service) TreesBLSCoSi(args *CoSiTrees) (*CoSiReplyTrees, error) {
 		return nil, err
 	}
 	// We send the initialization on the entire roster before sending signatures
-	trees := s.Lc.LocalityTrees[s.Lc.Nodes.GetServerIdentityToName(s.ServerIdentity())][1:]
-	n := len(trees)
-	if n == 0 {
-		return nil, nil
-	}
 	fullTree := trees[n-1]
 	data := PropagateData{Tx: tx, ServerID: s.ServerIdentity().String()}
 
@@ -552,7 +554,7 @@ func (s *Service) startPropagation(propagate propagate.PropagationFunc, tree *on
 
 // MemoryAllocated sends the bbolt memory allocated and the number of trees the node is a part of to the client.
 func (s *Service) MemoryAllocated(req *MemoryRequest) (*MemoryReply, error) {
-	time.Sleep(20000)
+	time.Sleep(30000)
 	var b int
 	s.db.View(func(tx *bbolt.Tx) error {
 		stats := tx.Bucket(s.bucketNameTx).Stats()
@@ -685,7 +687,7 @@ func GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
 // TxChain creates a valid sequence of encoded transactions of length n, where the public and private keys of the first sender,
 // the address of the genesis coin and the CoinID are given.
 func TxChain(n int, pubK0 kyber.Point, privK0 kyber.Scalar, genesisID []byte, coinID []byte) ([][]byte, error) {
-	payload := make([]byte, 650)
+	payload := make([]byte, 1650)
 	var txs [][]byte
 	pubK, err := pubK0.MarshalBinary()
 	if err != nil {

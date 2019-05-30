@@ -74,7 +74,7 @@ func (s *SimulationService) Node(config *onet.SimulationConfig) error {
 func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	size := config.Tree.Size()
 	log.Lvl2("Size is:", size, "rounds:", s.Rounds)
-	numberTXs := 10
+	numberTXs := 45 
 	var clients []*nylechain.Client
 	for i := 0; i < numberTXs; i++ {
 		clients = append(clients, nylechain.NewClient())
@@ -148,13 +148,15 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 		}(i, id)
 	}
 	wg.Wait()
+	averageMemories0, err := clients[0].RequestMemoryAllocated(serverIDS)
+	log.ErrFatal(err)
 	wg.Add(numberTXs)
 	start := time.Now()
 	for i, tx := range txs {
 		log.LLvl1(i)
 		//go func(i int, tx []byte) {
 		j := i % len(serverIDS)
-		_, err = clients[0].TreesBLSCoSi(serverIDS[j], tx)
+		_, err = clients[i].TreesBLSCoSi(serverIDS[j], tx)
 		log.ErrFatal(err)
 		wg.Done()
 		//}(i, tx)
@@ -171,7 +173,7 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	log.LLvl1("-----------------")
 	for i := 1; i < 30; i++ {
 		if averageMemories[i] > 0 {
-			log.LLvl1(i, "trees : ", averageMemories[i], " bytes")
+			log.LLvl1(i, "trees : ", averageMemories[i]-averageMemories0[i], " bytes")
 		}
 	}
 	log.LLvl1("-----------------")
