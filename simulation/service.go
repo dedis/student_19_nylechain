@@ -74,7 +74,7 @@ func (s *SimulationService) Node(config *onet.SimulationConfig) error {
 func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	size := config.Tree.Size()
 	log.Lvl2("Size is:", size, "rounds:", s.Rounds)
-	numberTXs := 1
+	numberTXs := 10
 	var clients []*nylechain.Client
 	for i := 0; i < numberTXs; i++ {
 		clients = append(clients, nylechain.NewClient())
@@ -151,13 +151,13 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	wg.Add(numberTXs)
 	start := time.Now()
 	for i, tx := range txs {
-		go func(i int, tx []byte) {
-			j := i % len(serverIDS)
-			_, err = clients[i].TreesBLSCoSi(serverIDS[j], tx)
-			log.ErrFatal(err)
-			log.LLvl1(i)
-			wg.Done()
-		}(i, tx)
+		log.LLvl1(i)
+		//go func(i int, tx []byte) {
+		j := i % len(serverIDS)
+		_, err = clients[0].TreesBLSCoSi(serverIDS[j], tx)
+		log.ErrFatal(err)
+		wg.Done()
+		//}(i, tx)
 	}
 	wg.Wait()
 	t := time.Now()

@@ -79,6 +79,8 @@ type Service struct {
 	coinToAtomic       map[string]int
 	atomicCoinReserved []int32
 
+	bytesUsedMain int
+
 	db *bbolt.DB
 
 	// Stores each transaction and its aggregate signatures (struct TxStorage), keyed to a hash of the encoded Tx.
@@ -260,6 +262,7 @@ func (s *Service) GenesisTx(args *GenesisArgs) (*VoidReply, error) {
 		// Store in the main bucket
 		b := bboltTx.Bucket(s.bucketNameTx)
 		err = b.Put(args.ID, storage)
+		s.bytesUsedMain += len(storage)
 		if err != nil {
 			return err
 		}
@@ -447,6 +450,7 @@ func (s *Service) propagateHandler(msg network.Message) error {
 		// We don't store it as "LastTx" yet : we wait for an aggregate signature.
 		if len(data.Signature) == 0 {
 			if v != nil {
+
 				// This Tx is already initialized in bbolt, we do nothing
 				return nil
 			}
@@ -457,6 +461,8 @@ func (s *Service) propagateHandler(msg network.Message) error {
 				return err
 			}
 			err = b.Put(h, txStorage)
+
+			s.bytesUsedMain += len(txStorage)
 			return err
 		}
 
@@ -493,9 +499,11 @@ func (s *Service) propagateHandler(msg network.Message) error {
 			return err
 		}
 		err = b.Put(h, storageEncoded)
+		s.bytesUsedMain += len(data.Signature)
 		if err != nil {
 			return err
 		}
+
 		// Update LastTx bucket too
 		b = bboltTx.Bucket(s.bucketNameLastTx)
 
@@ -544,16 +552,16 @@ func (s *Service) startPropagation(propagate propagate.PropagationFunc, tree *on
 
 // MemoryAllocated sends the bbolt memory allocated and the number of trees the node is a part of to the client.
 func (s *Service) MemoryAllocated(req *MemoryRequest) (*MemoryReply, error) {
+	time.Sleep(20000)
 	var b int
 	s.db.View(func(tx *bbolt.Tx) error {
 		stats := tx.Bucket(s.bucketNameTx).Stats()
 		b = stats.LeafInuse + stats.BranchInuse
 		return nil
 	})
-
 	return &MemoryReply{
 		BytesAllocated: b,
-		NbrTrees: len(s.trees),
+		NbrTrees:       len(s.trees),
 	}, nil
 }
 
@@ -678,9 +686,6 @@ func GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
 // the address of the genesis coin and the CoinID are given.
 func TxChain(n int, pubK0 kyber.Point, privK0 kyber.Scalar, genesisID []byte, coinID []byte) ([][]byte, error) {
 	payload := make([]byte, 650)
-	for i := 0; i < 650; i++ {
-		payload[i] = byte(i)
-	}
 	var txs [][]byte
 	pubK, err := pubK0.MarshalBinary()
 	if err != nil {
@@ -724,10 +729,7 @@ func TxChain(n int, pubK0 kyber.Point, privK0 kyber.Scalar, genesisID []byte, co
 // many transactions on different coins. For more simplicity, the sender and receiver are always the same.
 // A payload is also included for those transactions.
 func TxUnrelated(n int, pubK kyber.Point, pvK kyber.Scalar) ([][]byte, [][]byte) {
-	payload := make([]byte, 650)
-	for i := 0; i < 650; i++ {
-		payload[i] = byte(i)
-	}
+	payload := make([]byte, 1650)
 	suite := pairing.NewSuiteBn256()
 	pbK, _ := pubK.MarshalBinary()
 	_, pubK1 := bls.NewKeyPair(suite, random.New())
