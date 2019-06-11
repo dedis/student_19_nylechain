@@ -515,21 +515,9 @@ func (s *Service) propagateHandler(msg network.Message) error {
 			return err
 		}
 
-		// Register as LastTx for every subset of this tree's set
-		/*for id := range s.trees {
-			isSubset, err := s.IsSubSetOfNodes(data.TreeID, id)
-			if err != nil {
-				return err
-			}
-			if isSubset {
-				sha0 := sha256.New()
-				sha0.Write(s.treeIDSToSets[id])
-				err = b.Put(append(sha0.Sum(nil), data.Tx.Inner.CoinID...), h)
-				if err != nil {
-					return err
-				}
-			}
-		}*/
+		// Register as LastTx for every subset of this tree's set.
+		// TODO
+
 		return nil
 	})
 
@@ -558,7 +546,8 @@ func (s *Service) MemoryAllocated(req *MemoryRequest) (*MemoryReply, error) {
 	var b int
 	s.db.View(func(tx *bbolt.Tx) error {
 		stats := tx.Bucket(s.bucketNameTx).Stats()
-		b = stats.LeafInuse + stats.BranchInuse
+		// b = stats.LeafInuse + stats.BranchInuse
+		b = stats.LeafInuse
 		return nil
 	})
 	return &MemoryReply{
@@ -687,7 +676,7 @@ func GenerateSubTrees(args *SubTreeArgs) (*SubTreeReply, error) {
 // TxChain creates a valid sequence of encoded transactions of length n, where the public and private keys of the first sender,
 // the address of the genesis coin and the CoinID are given.
 func TxChain(n int, pubK0 kyber.Point, privK0 kyber.Scalar, genesisID []byte, coinID []byte) ([][]byte, error) {
-	payload := make([]byte, 1650)
+	payload := make([]byte, 650)
 	var txs [][]byte
 	pubK, err := pubK0.MarshalBinary()
 	if err != nil {
@@ -731,7 +720,7 @@ func TxChain(n int, pubK0 kyber.Point, privK0 kyber.Scalar, genesisID []byte, co
 // many transactions on different coins. For more simplicity, the sender and receiver are always the same.
 // A payload is also included for those transactions.
 func TxUnrelated(n int, pubK kyber.Point, pvK kyber.Scalar) ([][]byte, [][]byte) {
-	payload := make([]byte, 1650)
+	payload := make([]byte, 650)
 	suite := pairing.NewSuiteBn256()
 	pbK, _ := pubK.MarshalBinary()
 	_, pubK1 := bls.NewKeyPair(suite, random.New())

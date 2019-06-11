@@ -1,7 +1,8 @@
 Simulation = "NylechainService"
-Servers = 45
-Bf = 44
+Servers = 50
+Bf = 49
 Rounds = 1
+RunWait = "20m"
 CloseWait = 6000
 Suite = "bn256.adapter"
 

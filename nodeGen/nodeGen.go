@@ -85,7 +85,7 @@ func (s SortedNodes) Less(i, j int) bool {
 func main() {
 
 	K := flag.Int("K", 3, "Number of levels.")
-	N := flag.Int("N", 45, "Number of nodes.")
+	N := flag.Int("N", 50, "Number of nodes.")
 	SpaceMax := flag.Int("SpaceMax", 300, "Coordinate space size.")
 
 	flag.Parse()

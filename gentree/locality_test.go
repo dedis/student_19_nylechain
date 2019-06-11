@@ -16,7 +16,7 @@ var testSuite = pairing.NewSuiteBn256()
 
 func TestGenerateSubTrees(t *testing.T) {
 	local := onet.NewTCPTest(testSuite)
-	_, roster, _ := local.GenTree(45, true)
+	_, roster, _ := local.GenTree(90, true)
 	defer local.CloseAll()
 
 	lc := LocalityContext{}

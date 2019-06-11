@@ -74,9 +74,9 @@ func (s *SimulationService) Node(config *onet.SimulationConfig) error {
 func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	size := config.Tree.Size()
 	log.Lvl2("Size is:", size, "rounds:", s.Rounds)
-	numberTXs := 45 
+	numberTXs := 100
 	var clients []*nylechain.Client
-	for i := 0; i < numberTXs; i++ {
+	for i := 0; i < 1; i++ {
 		clients = append(clients, nylechain.NewClient())
 	}
 
@@ -140,12 +140,12 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 	ids, txs := service.TxUnrelated(numberTXs, PbK0, PvK0)
 	var wg sync.WaitGroup
 	wg.Add(numberTXs)
-	for i, id := range ids {
-		go func(i int, id []byte) {
-			err = clients[i].GenesisTx(serverIDS, id, id, PbK0)
+	for _, id := range ids {
+		//go func(i int, id []byte) {
+			err = clients[0].GenesisTx(serverIDS, id, id, PbK0)
 			log.ErrFatal(err)
 			wg.Done()
-		}(i, id)
+		//}(i, id)
 	}
 	wg.Wait()
 	averageMemories0, err := clients[0].RequestMemoryAllocated(serverIDS)
@@ -156,7 +156,7 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 		log.LLvl1(i)
 		//go func(i int, tx []byte) {
 		j := i % len(serverIDS)
-		_, err = clients[i].TreesBLSCoSi(serverIDS[j], tx)
+		_, err = clients[0].TreesBLSCoSi(serverIDS[j], tx)
 		log.ErrFatal(err)
 		wg.Done()
 		//}(i, tx)
@@ -171,7 +171,7 @@ func (s *SimulationService) Run(config *onet.SimulationConfig) error {
 
 	log.LLvl1("Time to execute ", len(txs), " Tx(s) :", elapsed)
 	log.LLvl1("-----------------")
-	for i := 1; i < 30; i++ {
+	for i := 1; i < 50; i++ {
 		if averageMemories[i] > 0 {
 			log.LLvl1(i, "trees : ", averageMemories[i]-averageMemories0[i], " bytes")
 		}

@@ -1,0 +1,21 @@
+\contentsline {section}{\numberline {1}Introduction}{2}% 
+\contentsline {subsection}{\numberline {1.1}Nyle}{2}% 
+\contentsline {subsection}{\numberline {1.2}Goals}{3}% 
+\contentsline {section}{\numberline {2}Design}{3}% 
+\contentsline {subsection}{\numberline {2.1}Transactions}{3}% 
+\contentsline {subsubsection}{\numberline {2.1.1}Transaction structure}{3}% 
+\contentsline {subsubsection}{\numberline {2.1.2}Transaction validity}{4}% 
+\contentsline {subsection}{\numberline {2.2}Signatures}{4}% 
+\contentsline {subsection}{\numberline {2.3}Process}{4}% 
+\contentsline {subsection}{\numberline {2.4}Storage}{7}% 
+\contentsline {section}{\numberline {3}Implementation}{7}% 
+\contentsline {subsection}{\numberline {3.1}Protocol}{8}% 
+\contentsline {subsection}{\numberline {3.2}Service}{8}% 
+\contentsline {subsubsection}{\numberline {3.2.1}Service storage}{9}% 
+\contentsline {subsubsection}{\numberline {3.2.2}Setup}{9}% 
+\contentsline {subsubsection}{\numberline {3.2.3}Transaction processing}{9}% 
+\contentsline {subsection}{\numberline {3.3}API}{10}% 
+\contentsline {subsection}{\numberline {3.4}Tree-based vs set-based storing}{10}% 
+\contentsline {section}{\numberline {4}Simulation analysis}{11}% 
+\contentsline {section}{\numberline {5}Future work}{15}% 
+\contentsline {section}{\numberline {6}Bibliography}{16}% 

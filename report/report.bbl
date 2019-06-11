@@ -1,0 +1,31 @@
+\begin{thebibliography}{1}
+
+\bibitem{byzcoinx}
+Byzcoinx: improved bftcosi.
+\newblock \url{https://github.com/dedis/cothority/tree/master/byzcoinx}.
+
+\bibitem{castro1999practical}
+Miguel Castro, Barbara Liskov, et~al.
+\newblock Practical byzantine fault tolerance.
+\newblock In {\em OSDI}, volume~99, pages 173--186, 1999.
+
+\bibitem{thorup2005approximate}
+Mikkel Thorup and Uri Zwick.
+\newblock Approximate distance oracles.
+\newblock {\em Journal of the ACM (JACM)}, 52(1):1--24, 2005.
+
+\bibitem{basescu2014crux}
+Cristina Basescu, Michael~F Nowlan, Kirill Nikitin, Jose~M Faleiro, and Bryan
+  Ford.
+\newblock Crux: Locality-preserving distributed services.
+\newblock {\em arXiv preprint arXiv:1405.0637}, 2014.
+
+\bibitem{bbolt}
+Bbolt: An embedded key/value database for go.
+\newblock \url{https://github.com/etcd-io/bbolt}.
+
+\bibitem{protobuf}
+Protobuf: Reflection-based protocol buffers for go.
+\newblock \url{https://github.com/dedis/protobuf}.
+
+\end{thebibliography}

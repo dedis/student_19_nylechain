@@ -16,7 +16,7 @@ type InnerTx struct {
 	ReceiverPK []byte
 }
 
-// Tx includes the signature of InnerTx
+// Tx includes the signature of the encoded InnerTx
 type Tx struct {
 	Inner     InnerTx
 	Signature []byte
